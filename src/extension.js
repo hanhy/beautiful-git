@@ -933,7 +933,7 @@ function getWebviewHtml(webview, extensionUri, state) {
 
     .merge-grid {
       display: grid;
-      grid-template-columns: minmax(260px, 1fr) minmax(320px, 1.22fr) minmax(260px, 1fr);
+      grid-template-columns: minmax(260px, 1fr) 46px minmax(320px, 1.18fr) 46px minmax(260px, 1fr);
       min-height: 0;
       overflow: hidden;
     }
@@ -947,6 +947,14 @@ function getWebviewHtml(webview, extensionUri, state) {
     }
 
     .pane:last-child { border-right: 0; }
+
+    .merge-gap-pane {
+      min-width: 0;
+      overflow: hidden;
+      background: #191b1f;
+      border-right: 1px solid #343840;
+      border-left: 1px solid #24272d;
+    }
 
     .pane-header {
       position: sticky;
@@ -985,21 +993,25 @@ function getWebviewHtml(webview, extensionUri, state) {
     .section.conflict.kind-changed {
       --band-fill: var(--blue-ribbon);
       --band-line: rgba(121, 160, 201, 0.38);
+      --line-fill: rgba(67, 108, 151, 0.54);
     }
 
     .section.conflict.kind-added {
       --band-fill: var(--green-ribbon);
       --band-line: rgba(106, 171, 115, 0.38);
+      --line-fill: rgba(58, 105, 70, 0.54);
     }
 
     .section.conflict.kind-deleted {
       --band-fill: var(--gray-ribbon);
       --band-line: rgba(165, 171, 178, 0.32);
+      --line-fill: rgba(79, 83, 89, 0.5);
     }
 
     .section.conflict.kind-conflict {
       --band-fill: var(--red-ribbon);
       --band-line: rgba(193, 124, 116, 0.4);
+      --line-fill: rgba(111, 67, 60, 0.58);
     }
 
     .change-band {
@@ -1015,22 +1027,94 @@ function getWebviewHtml(webview, extensionUri, state) {
     }
 
     .left-ribbon .change-band {
-      left: 30px;
-      right: -1px;
-      clip-path: polygon(0 0, calc(100% - 22px) 0, 100% 50%, calc(100% - 22px) 100%, 0 100%);
+      left: 48px;
+      right: 0;
     }
 
     .right-ribbon .change-band {
-      left: -1px;
-      right: 30px;
-      clip-path: polygon(22px 0, 100% 0, 100% 100%, 22px 100%, 0 50%);
+      left: 0;
+      right: 48px;
     }
 
     .result-ribbon .change-band {
       left: 0;
       right: 0;
       top: 0;
-      clip-path: polygon(20px 0, calc(100% - 20px) 0, 100% 50%, calc(100% - 20px) 100%, 20px 100%, 0 50%);
+    }
+
+    .merge-gap-section {
+      position: relative;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+      --band-fill: rgba(73, 82, 93, 0.5);
+      --band-line: rgba(140, 148, 160, 0.28);
+    }
+
+    .merge-gap-section.kind-changed {
+      --band-fill: var(--blue-ribbon);
+      --band-line: rgba(121, 160, 201, 0.38);
+    }
+
+    .merge-gap-section.kind-added {
+      --band-fill: var(--green-ribbon);
+      --band-line: rgba(106, 171, 115, 0.38);
+    }
+
+    .merge-gap-section.kind-deleted {
+      --band-fill: var(--gray-ribbon);
+      --band-line: rgba(165, 171, 178, 0.32);
+    }
+
+    .merge-gap-section.kind-conflict {
+      --band-fill: var(--red-ribbon);
+      --band-line: rgba(193, 124, 116, 0.4);
+    }
+
+    .merge-gap-section .change-band {
+      position: absolute;
+      z-index: 1;
+      top: 26px;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: var(--band-fill);
+      border-top: 1px solid var(--band-line);
+      border-bottom: 1px solid rgba(0, 0, 0, 0.24);
+      opacity: 0.95;
+      pointer-events: none;
+    }
+
+    .left-gap .merge-gap-section .change-band {
+      clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 50%, calc(100% - 14px) 100%, 0 100%);
+    }
+
+    .right-gap .merge-gap-section .change-band {
+      clip-path: polygon(14px 0, 100% 0, 100% 100%, 14px 100%, 0 50%);
+    }
+
+    .merge-gap-section.discarded .change-band {
+      background: transparent;
+      border: 1px dashed var(--band-line);
+      clip-path: none;
+      left: 5px;
+      right: 5px;
+      top: 29px;
+      bottom: 3px;
+    }
+
+    .gap-title {
+      position: relative;
+      z-index: 2;
+      height: 26px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    }
+
+    .gap-lines {
+      position: relative;
+      z-index: 2;
+    }
+
+    .gap-line {
+      min-height: 22px;
     }
 
     .section.conflict.discarded .change-band {
@@ -1157,7 +1241,7 @@ function getWebviewHtml(webview, extensionUri, state) {
     .unchanged .source { color: #969ba4; }
     .left-change .line,
     .right-change .line,
-    .result-change .line { background: transparent; }
+    .result-change .line { background: var(--line-fill, transparent); }
     .empty {
       padding: 18px 12px 18px 62px;
       color: var(--muted);
@@ -1192,6 +1276,7 @@ function getWebviewHtml(webview, extensionUri, state) {
     @media (max-width: 900px) {
       .merge-grid { grid-template-columns: 1fr; }
       .pane { border-right: 0; border-bottom: 1px solid var(--border); }
+      .merge-gap-pane { display: none; }
       .window { grid-template-rows: 42px 42px minmax(0, 1fr) 54px; }
     }
   </style>
@@ -1217,7 +1302,9 @@ function getWebviewHtml(webview, extensionUri, state) {
     </nav>
     <main class="merge-grid">
       <section class="pane" id="leftPane"></section>
+      <section class="merge-gap-pane left-gap" id="leftGapPane"></section>
       <section class="pane" id="resultPane"></section>
+      <section class="merge-gap-pane right-gap" id="rightGapPane"></section>
       <section class="pane" id="rightPane"></section>
     </main>
     <footer class="footer">
@@ -1248,7 +1335,9 @@ function getWebviewHtml(webview, extensionUri, state) {
 
     const panes = {
       left: document.getElementById("leftPane"),
+      leftGap: document.getElementById("leftGapPane"),
       result: document.getElementById("resultPane"),
+      rightGap: document.getElementById("rightGapPane"),
       right: document.getElementById("rightPane")
     };
 
@@ -1310,7 +1399,9 @@ function getWebviewHtml(webview, extensionUri, state) {
 
     function render() {
       panes.left.innerHTML = paneHeader("Changes from " + firstLabel("leftLabel"), true) + renderSide("left");
+      panes.leftGap.innerHTML = gapHeader() + renderGap("left");
       panes.result.innerHTML = paneHeader("Result", false) + renderResult();
+      panes.rightGap.innerHTML = gapHeader() + renderGap("right");
       panes.right.innerHTML = paneHeader("Changes from " + firstLabel("rightLabel"), true) + renderSide("right");
       document.getElementById("stats").textContent = mergeState.conflictCount + " conflict" + (mergeState.conflictCount === 1 ? "" : "s");
       restoreScrollCoupling();
@@ -1362,6 +1453,21 @@ function getWebviewHtml(webview, extensionUri, state) {
       }).join("");
     }
 
+    function renderGap(side) {
+      return mergeState.segments.map((segment) => {
+        if (segment.type === "text") {
+          return gapSection(gapSpacer(segment.text));
+        }
+        const sideText = side === "left" ? segment.left : segment.right;
+        const kind = conflictKind(segment);
+        const discardedClass = discarded[segment.id] ? " discarded" : "";
+        return gapSection(
+          '<div class="change-band"></div><div class="gap-title"></div>' + gapSpacer(sideText),
+          "kind-" + kind + discardedClass
+        );
+      }).join("");
+    }
+
     function ribbonMarkup(segment, side, action, arrow) {
       const controls = side === "right"
         ? '<button data-action="' + action + '" data-id="' + segment.id + '" title="Accept this block">' + arrow + '</button>' +
@@ -1378,16 +1484,22 @@ function getWebviewHtml(webview, extensionUri, state) {
     function conflictKind(segment) {
       const left = segment.left.trim();
       const right = segment.right.trim();
-      if (left && right && left !== right) {
-        return "conflict";
-      }
       if (!left && right) {
         return "added";
       }
       if (left && !right) {
         return "deleted";
       }
+      if (left && right && left !== right) {
+        return countDisplayLines(segment.left) === countDisplayLines(segment.right) ? "changed" : "conflict";
+      }
       return "changed";
+    }
+
+    function countDisplayLines(text) {
+      const normalized = normalizeForDisplay(text).replace(/\\r\\n/g, "\\n").replace(/\\r/g, "\\n");
+      const lines = normalized.split("\\n");
+      return lines.length > 1 && lines[lines.length - 1] === "" ? lines.length - 1 : lines.length;
     }
 
     function paneHeader(title, showDetails) {
@@ -1396,8 +1508,16 @@ function getWebviewHtml(webview, extensionUri, state) {
         "</div>";
     }
 
+    function gapHeader() {
+      return '<div class="pane-header"></div>';
+    }
+
     function section(content, extraClass = "", id = "") {
       return '<div class="section ' + extraClass + '"' + (id ? ' id="' + id + '"' : "") + ">" + content + "</div>";
+    }
+
+    function gapSection(content, extraClass = "") {
+      return '<div class="merge-gap-section ' + extraClass + '">' + content + "</div>";
     }
 
     function codeBlock(text, startLine, className) {
@@ -1414,6 +1534,17 @@ function getWebviewHtml(webview, extensionUri, state) {
         const lineNumber = Number.isFinite(numberBase) ? numberBase + index : "";
         return '<div class="line"><span class="gutter">' + lineNumber + '</span><span class="source">' + decorateCode(line) + "</span></div>";
       }).join("") + "</div>";
+    }
+
+    function gapSpacer(text) {
+      let lines = normalizeForDisplay(text).replace(/\\r\\n/g, "\\n").replace(/\\r/g, "\\n").split("\\n");
+      if (lines.length > 1 && lines[lines.length - 1] === "") {
+        lines = lines.slice(0, -1);
+      }
+      if (lines.length === 1 && lines[0] === "") {
+        return '<div class="gap-lines"><div class="gap-line"></div></div>';
+      }
+      return '<div class="gap-lines">' + lines.map(() => '<div class="gap-line"></div>').join("") + "</div>";
     }
 
     function normalizeForDisplay(text) {
@@ -1452,7 +1583,7 @@ function getWebviewHtml(webview, extensionUri, state) {
     }
 
     function restoreScrollCoupling() {
-      const paneList = [panes.left, panes.result, panes.right];
+      const paneList = [panes.left, panes.leftGap, panes.result, panes.rightGap, panes.right];
       let syncing = false;
       for (const pane of paneList) {
         pane.onscroll = () => {
