@@ -84,6 +84,18 @@
           "group": "navigation@10"
         }
       ],
+      "editor/context": [
+        {
+          "command": "beautifulGit.annotateBlame",
+          "when": "resourceScheme == file && !beautifulGit.annotationVisible",
+          "group": "navigation@10"
+        },
+        {
+          "command": "beautifulGit.closeAnnotation",
+          "when": "resourceScheme == file && beautifulGit.annotationVisible",
+          "group": "navigation@10"
+        }
+      ],
       "editor/title": [
         {
           "command": "ideaMergeResolver.open",
