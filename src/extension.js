@@ -390,12 +390,14 @@ function getCommitViewHtml(webview) {
       font: inherit;
     }
     button {
-      min-height: 28px;
+      min-height: 24px;
       border: 1px solid #4a4e57;
-      border-radius: 4px;
+      border-radius: 3px;
       background: #30333a;
       color: var(--text);
       cursor: pointer;
+      padding: 1px 8px;
+      line-height: 18px;
     }
     button:hover { background: #383c45; border-color: #6a707c; }
     button.primary { background: #3f73d8; border-color: #4f83e9; color: white; }
@@ -433,7 +435,7 @@ function getCommitViewHtml(webview) {
     }
     .toolbar button {
       min-height: 24px;
-      padding: 2px 7px;
+      padding: 1px 7px;
     }
     .files {
       overflow: auto;
@@ -468,7 +470,7 @@ function getCommitViewHtml(webview) {
     .badge {
       justify-self: end;
       border: 1px solid #4b5059;
-      border-radius: 4px;
+      border-radius: 3px;
       padding: 1px 5px;
       color: #c8ccd3;
       font-size: 11px;
@@ -487,7 +489,7 @@ function getCommitViewHtml(webview) {
       min-height: 82px;
       resize: vertical;
       border: 1px solid #4c515a;
-      border-radius: 4px;
+      border-radius: 3px;
       outline: none;
       background: #1e2024;
       color: var(--text);
@@ -680,14 +682,15 @@ function getConflictsDialogHtml(webview, state) {
       font: 13px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
     button {
-      min-height: 28px;
+      min-height: 24px;
       border: 1px solid #515762;
-      border-radius: 4px;
+      border-radius: 3px;
       background: #30333a;
       color: var(--text);
       font: inherit;
       cursor: pointer;
-      padding: 3px 10px;
+      padding: 1px 8px;
+      line-height: 18px;
     }
     button:hover { background: #383c45; border-color: #717783; }
     button.primary { background: #3f73d8; border-color: #5287ee; color: white; }
@@ -851,8 +854,12 @@ function getWebviewHtml(webview, extensionUri, state) {
       --muted: #858a93;
       --blue: #4775ac;
       --blue-soft: rgba(64, 116, 173, 0.32);
+      --blue-ribbon: rgba(69, 104, 142, 0.72);
       --green-soft: rgba(63, 141, 86, 0.32);
+      --green-ribbon: rgba(58, 107, 75, 0.7);
       --red-soft: rgba(139, 74, 65, 0.35);
+      --red-ribbon: rgba(105, 63, 58, 0.72);
+      --neutral-ribbon: rgba(92, 97, 101, 0.68);
       --yellow: #d7ba7d;
       --accent: #4b86e8;
       --danger: #d1867a;
@@ -870,27 +877,28 @@ function getWebviewHtml(webview, extensionUri, state) {
 
     button, select {
       color: var(--text);
-      background: #30333a;
-      border: 1px solid #50545c;
-      border-radius: 5px;
-      min-height: 28px;
-      padding: 3px 10px;
+      background: #303238;
+      border: 1px solid #4b4f57;
+      border-radius: 3px;
+      min-height: 24px;
+      padding: 1px 8px;
       font: inherit;
+      line-height: 18px;
     }
 
     button {
       cursor: pointer;
     }
 
-    button:hover { border-color: #727782; background: #383c44; }
-    button.primary { background: #3f73d8; border-color: #4b82ed; color: white; }
-    button.icon { min-width: 30px; padding: 2px 8px; font-weight: 700; }
+    button:hover { border-color: #686d76; background: #373a41; }
+    button.primary { background: #3f6fcb; border-color: #4c7de0; color: white; }
+    button.icon { min-width: 24px; padding: 1px 5px; font-weight: 600; }
     button.ghost { background: transparent; border-color: transparent; }
     button.danger { color: var(--danger); }
 
     .window {
       display: grid;
-      grid-template-rows: 42px 36px minmax(0, 1fr) 48px;
+      grid-template-rows: 34px 32px minmax(0, 1fr) 40px;
       height: 100vh;
     }
 
@@ -898,7 +906,7 @@ function getWebviewHtml(webview, extensionUri, state) {
       display: flex;
       align-items: center;
       gap: 12px;
-      padding: 0 14px;
+      padding: 0 12px;
       background: var(--chrome);
       border-bottom: 1px solid #25272b;
       white-space: nowrap;
@@ -915,8 +923,8 @@ function getWebviewHtml(webview, extensionUri, state) {
     .toolbar {
       display: flex;
       align-items: center;
-      gap: 8px;
-      padding: 4px 12px;
+      gap: 6px;
+      padding: 3px 10px;
       background: var(--chrome);
       border-bottom: 1px solid #25272b;
       overflow-x: auto;
@@ -935,7 +943,8 @@ function getWebviewHtml(webview, extensionUri, state) {
 
     .pane {
       min-width: 0;
-      overflow: auto;
+      overflow-y: auto;
+      overflow-x: hidden;
       border-right: 1px solid var(--border);
       background: #1e2024;
     }
@@ -950,7 +959,7 @@ function getWebviewHtml(webview, extensionUri, state) {
       align-items: center;
       justify-content: space-between;
       gap: 10px;
-      height: 34px;
+      height: 30px;
       padding: 0 12px;
       background: #25272c;
       border-bottom: 1px solid var(--border);
@@ -971,15 +980,119 @@ function getWebviewHtml(webview, extensionUri, state) {
     .section.conflict {
       position: relative;
       border-top: 1px solid rgba(255, 255, 255, 0.09);
+      isolation: isolate;
+      --ribbon-fill: var(--neutral-ribbon);
+      --ribbon-line: rgba(165, 171, 178, 0.3);
+    }
+
+    .section.conflict.left-ribbon {
+      --ribbon-fill: var(--blue-ribbon);
+      --ribbon-line: rgba(121, 160, 201, 0.42);
+    }
+
+    .section.conflict.right-ribbon {
+      --ribbon-fill: var(--red-ribbon);
+      --ribbon-line: rgba(193, 124, 116, 0.38);
+    }
+
+    .section.conflict.result-ribbon {
+      --ribbon-fill: var(--green-ribbon);
+      --ribbon-line: rgba(106, 171, 115, 0.35);
+    }
+
+    .merge-ribbon {
+      position: absolute;
+      z-index: 1;
+      top: 34px;
+      height: 38px;
+      background: var(--ribbon-fill);
+      border-top: 1px solid var(--ribbon-line);
+      border-bottom: 1px solid rgba(0, 0, 0, 0.24);
+      opacity: 0.95;
+      pointer-events: none;
+    }
+
+    .left-ribbon .merge-ribbon {
+      left: 30px;
+      right: -1px;
+      clip-path: polygon(0 0, calc(100% - 22px) 0, 100% 50%, calc(100% - 22px) 100%, 0 100%);
+      border-top-right-radius: 2px;
+      border-bottom-right-radius: 2px;
+    }
+
+    .right-ribbon .merge-ribbon {
+      left: -1px;
+      right: 30px;
+      clip-path: polygon(22px 0, 100% 0, 100% 100%, 22px 100%, 0 50%);
+      border-top-left-radius: 2px;
+      border-bottom-left-radius: 2px;
+    }
+
+    .result-ribbon .merge-ribbon {
+      left: 0;
+      right: 0;
+      top: 42px;
+      height: 118px;
+      background: rgba(78, 86, 86, 0.74);
+      clip-path: polygon(28px 0, 100% 0, 100% 100%, 28px 100%, 0 50%);
+    }
+
+    .ribbon-rail {
+      position: absolute;
+      z-index: 2;
+      top: 33px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      height: 24px;
+      color: #cfd3da;
+      font: 13px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
+    .left-ribbon .ribbon-rail {
+      right: 5px;
+    }
+
+    .right-ribbon .ribbon-rail {
+      left: 5px;
+    }
+
+    .result-ribbon .ribbon-rail {
+      left: 10px;
+      color: #aeb5bf;
+    }
+
+    .ribbon-rail button {
+      min-width: 20px;
+      min-height: 20px;
+      padding: 0 3px;
+      border: 0;
+      background: transparent;
+      color: #cdd2da;
+      font: 16px/18px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      pointer-events: auto;
+    }
+
+    .ribbon-rail button:hover {
+      background: rgba(255, 255, 255, 0.08);
+      border: 0;
+    }
+
+    .ribbon-line-number {
+      min-width: 28px;
+      color: #b9c0c9;
+      text-align: left;
     }
 
     .section-title {
+      position: relative;
+      z-index: 3;
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 8px;
-      min-height: 30px;
-      padding: 4px 10px 4px 54px;
+      min-height: 26px;
+      padding: 3px 8px 3px 52px;
       color: #aeb4bd;
       background: rgba(255, 255, 255, 0.025);
       border-bottom: 1px solid rgba(255, 255, 255, 0.05);
@@ -987,8 +1100,13 @@ function getWebviewHtml(webview, extensionUri, state) {
 
     .section-title .actions {
       display: flex;
-      gap: 4px;
+      gap: 3px;
       flex: 0 0 auto;
+    }
+
+    .section-title .actions button {
+      min-height: 21px;
+      padding: 0 6px;
     }
 
     .code {
@@ -1001,6 +1119,8 @@ function getWebviewHtml(webview, extensionUri, state) {
       grid-template-columns: 48px minmax(0, 1fr);
       min-height: 22px;
       white-space: pre;
+      position: relative;
+      z-index: 2;
     }
 
     .gutter {
@@ -1033,16 +1153,18 @@ function getWebviewHtml(webview, extensionUri, state) {
     }
 
     textarea.result-editor {
-      width: calc(100% - 18px);
+      position: relative;
+      z-index: 2;
+      width: calc(100% - 16px);
       min-height: 120px;
-      margin: 9px;
+      margin: 8px;
       resize: vertical;
       border: 1px solid #515762;
-      border-radius: 4px;
+      border-radius: 3px;
       outline: none;
       background: #202328;
       color: #d9dde5;
-      padding: 10px 12px;
+      padding: 8px 10px;
       font: 13px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
       letter-spacing: 0;
     }
@@ -1055,8 +1177,8 @@ function getWebviewHtml(webview, extensionUri, state) {
     .footer {
       display: flex;
       align-items: center;
-      gap: 10px;
-      padding: 8px 12px;
+      gap: 8px;
+      padding: 6px 10px;
       background: var(--chrome);
       border-top: 1px solid #383b41;
     }
@@ -1153,6 +1275,8 @@ function getWebviewHtml(webview, extensionUri, state) {
         setResolution(id, conflictById(id).left);
       } else if (action === "right") {
         setResolution(id, conflictById(id).right);
+      } else if (action === "empty") {
+        setResolution(id, "");
       } else if (action === "both") {
         const conflict = conflictById(id);
         setResolution(id, ensureTrailingLineBreak(conflict.left) + conflict.right);
@@ -1216,16 +1340,19 @@ function getWebviewHtml(webview, extensionUri, state) {
         const label = side === "left" ? segment.leftLabel : segment.rightLabel;
         const action = side === "left" ? "left" : "right";
         const cls = side === "left" ? "left-change" : "right-change";
+        const ribbonClass = side === "left" ? "left-ribbon" : "right-ribbon";
+        const arrow = side === "left" ? "»" : "«";
         return section(
+          ribbonMarkup(segment, action, arrow) +
           '<div class="section-title">' +
             '<span>#' + (segment.id + 1) + " " + escapeHtml(label || side) + "</span>" +
             '<span class="actions">' +
               '<button class="icon" data-action="reveal" data-line="' + segment.startLine + '" title="Reveal in file">↗</button>' +
-              '<button class="icon" data-action="' + action + '" data-id="' + segment.id + '" title="Accept this side">»</button>' +
+              '<button class="icon" data-action="' + action + '" data-id="' + segment.id + '" title="Accept this side">' + arrow + '</button>' +
             "</span>" +
           "</div>" +
           codeBlock(text, segment.startLine + 1, cls),
-          "conflict",
+          "conflict " + ribbonClass,
           "conflict-" + segment.id + "-" + side
         );
       }).join("");
@@ -1238,6 +1365,7 @@ function getWebviewHtml(webview, extensionUri, state) {
         }
         const value = resolutions[segment.id] ?? segment.left;
         return section(
+          '<div class="merge-ribbon"></div><div class="ribbon-rail"><span class="ribbon-line-number">' + segment.startLine + '</span></div>' +
           '<div class="section-title">' +
             '<span>#' + (segment.id + 1) + " resolved text</span>" +
             '<span class="actions">' +
@@ -1248,10 +1376,19 @@ function getWebviewHtml(webview, extensionUri, state) {
           "</div>" +
           '<textarea class="result-editor" data-id="' + segment.id + '" spellcheck="false">' + escapeHtml(value) + "</textarea>" +
           codeBlock(value, segment.startLine + 1, "result-change"),
-          "conflict",
+          "conflict result-ribbon",
           "conflict-" + segment.id + "-result"
         );
       }).join("");
+    }
+
+    function ribbonMarkup(segment, action, arrow) {
+      return '<div class="merge-ribbon"></div>' +
+        '<div class="ribbon-rail">' +
+          '<button data-action="empty" data-id="' + segment.id + '" title="Remove this block">×</button>' +
+          '<button data-action="' + action + '" data-id="' + segment.id + '" title="Accept this block">' + arrow + '</button>' +
+          '<span class="ribbon-line-number">' + segment.startLine + '</span>' +
+        '</div>';
     }
 
     function paneHeader(title, showDetails) {
