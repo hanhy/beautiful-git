@@ -1,7 +1,7 @@
 {
   "name": "idea-merge-resolver",
   "displayName": "IDEA Merge Resolver",
-  "description": "Resolve Git merge conflicts in an IntelliJ IDEA-style three-pane merge editor.",
+  "description": "IntelliJ IDEA-style Git commit and merge conflict tools for VS Code.",
   "version": "0.1.0",
   "publisher": "local",
   "engines": {
@@ -13,10 +13,36 @@
   ],
   "activationEvents": [
     "onCommand:ideaMergeResolver.open",
-    "onCommand:ideaMergeResolver.openResource"
+    "onCommand:ideaMergeResolver.openResource",
+    "onCommand:beautifulGit.commitFiles",
+    "onCommand:beautifulGit.resolveConflicts",
+    "onView:beautifulGit.commitView"
   ],
   "main": "./src/extension.js",
   "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "beautifulGit",
+          "title": "Git",
+          "icon": "media/git.svg"
+        }
+      ]
+    },
+    "views": {
+      "beautifulGit": [
+        {
+          "id": "beautifulGit.commitView",
+          "name": "Commit"
+        }
+      ]
+    },
+    "submenus": [
+      {
+        "id": "beautifulGit.directoryGit",
+        "label": "Git"
+      }
+    ],
     "commands": [
       {
         "command": "ideaMergeResolver.open",
@@ -25,6 +51,14 @@
       {
         "command": "ideaMergeResolver.openResource",
         "title": "Open in IDEA Merge Resolver"
+      },
+      {
+        "command": "beautifulGit.commitFiles",
+        "title": "Commit Files..."
+      },
+      {
+        "command": "beautifulGit.resolveConflicts",
+        "title": "Resolve Conflicts..."
       }
     ],
     "menus": {
@@ -36,16 +70,31 @@
       ],
       "explorer/context": [
         {
+          "submenu": "beautifulGit.directoryGit",
+          "when": "explorerResourceIsFolder && resourceScheme == file",
+          "group": "navigation@10"
+        },
+        {
           "command": "ideaMergeResolver.openResource",
           "when": "resourceScheme == file",
           "group": "navigation@90"
+        }
+      ],
+      "beautifulGit.directoryGit": [
+        {
+          "command": "beautifulGit.commitFiles",
+          "group": "1_git@10"
+        },
+        {
+          "command": "beautifulGit.resolveConflicts",
+          "group": "1_git@20"
         }
       ]
     }
   },
   "scripts": {
-    "test": "node test/parser.test.js",
-    "check": "node --check src/extension.js && node --check src/conflictParser.js"
+    "test": "node test/parser.test.js && node test/git.test.js && node test/git.integration.test.js",
+    "check": "node --check src/extension.js && node --check src/conflictParser.js && node --check src/git.js"
   },
   "devDependencies": {}
 }

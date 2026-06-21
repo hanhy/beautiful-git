@@ -5,6 +5,9 @@ A local VS Code extension that opens Git conflict-marker files in an IntelliJ ID
 ## Features
 
 - Left / Result / Right layout inspired by IDEA's merge dialog.
+- IntelliJ IDEA-style directory context menu: `Git > Commit Files...` and `Git > Resolve Conflicts...`.
+- Sidebar commit panel with changed-file checkboxes, commit message input, `Commit`, and `Commit & Push`.
+- Resolve Conflicts dialog listing all conflicted files in the selected directory.
 - Opens from the editor title or Explorer context menu.
 - Parses standard Git conflict markers, including optional `||||||| base` sections.
 - Accept one conflict from the left or right side, accept both, or apply all left/right changes.
@@ -46,16 +49,39 @@ Use this if you want to modify or debug the extension.
 
 ## Usage
 
+### Commit Files
+
+1. Open a Git repository in VS Code.
+2. Right-click a directory in Explorer.
+3. Choose `Git > Commit Files...`.
+4. In the left sidebar Commit panel, select the files you want to commit.
+5. Type the commit message at the bottom.
+6. Click `Commit` for a local commit, or `Commit & Push` to commit and push.
+
+### Resolve Conflicts
+
 1. Open a Git repository that has merge conflicts.
-2. Open a conflicted file containing conflict markers such as `<<<<<<<`, `=======`, and `>>>>>>>`.
-3. Run `IDEA Merge Resolver: Open Current File` from the command palette.
-4. In the merge view:
+2. Right-click a directory in Explorer.
+3. Choose `Git > Resolve Conflicts...`.
+4. In the conflict list, choose one of these actions:
+   - `Accept Yours` to resolve the whole file with the left/current side.
+   - `Accept Theirs` to resolve the whole file with the right/incoming side.
+   - `Merge...` to open the three-pane IDEA-style merge editor.
+5. In the merge editor, choose `Left`, `Right`, or `Both`, or edit the Result text manually.
+6. Click `Apply` to write the resolved content back to the file.
+7. Review the file, then run `git add <file>` and continue your merge or rebase.
+
+### Open One File Directly
+
+1. Open a conflicted file containing conflict markers such as `<<<<<<<`, `=======`, and `>>>>>>>`.
+2. Run `IDEA Merge Resolver: Open Current File` from the command palette.
+3. In the merge view:
    - Click `Left` to use the current branch's block.
    - Click `Right` to use the incoming branch's block.
    - Click `Both` to keep both sides.
    - Edit the Result text area manually if needed.
-5. Click `Apply` to write the resolved content back to the file.
-6. Review the file, then run `git add <file>` and continue your merge or rebase.
+4. Click `Apply` to write the resolved content back to the file.
+5. Review the file, then run `git add <file>` and continue your merge or rebase.
 
 You can also right-click a file in the Explorer and choose `Open in IDEA Merge Resolver`.
 
@@ -63,6 +89,8 @@ You can also right-click a file in the Explorer and choose `Open in IDEA Merge R
 
 - `IDEA Merge Resolver: Open Current File`
 - `Open in IDEA Merge Resolver`
+- `Commit Files...`
+- `Resolve Conflicts...`
 
 ## Development
 

@@ -3,11 +3,25 @@
 const path = require("path");
 const vscode = require("vscode");
 const { composeResolvedDocument, parseConflictDocument } = require("./conflictParser");
+const {
+  commitFiles,
+  findGitRoot,
+  getChangedFiles,
+  getConflictFiles,
+  getCurrentBranch,
+  push
+} = require("./git");
 
 function activate(context) {
+  const commitViewProvider = new CommitViewProvider(context);
   context.subscriptions.push(
+    vscode.window.registerWebviewViewProvider(CommitViewProvider.viewType, commitViewProvider, {
+      webviewOptions: { retainContextWhenHidden: true }
+    }),
     vscode.commands.registerCommand("ideaMergeResolver.open", () => openFromActiveEditor(context)),
-    vscode.commands.registerCommand("ideaMergeResolver.openResource", (resource) => openFromResource(context, resource))
+    vscode.commands.registerCommand("ideaMergeResolver.openResource", (resource) => openFromResource(context, resource)),
+    vscode.commands.registerCommand("beautifulGit.commitFiles", (resource) => openCommitFiles(commitViewProvider, resource)),
+    vscode.commands.registerCommand("beautifulGit.resolveConflicts", (resource) => openResolveConflicts(context, resource))
   );
 }
 
@@ -29,6 +43,224 @@ async function openFromResource(context, resource) {
     return;
   }
   await openMergeResolver(context, uri);
+}
+
+async function openCommitFiles(provider, resource) {
+  try {
+    const target = await getGitTarget(resource);
+    await provider.setTarget(target);
+    await vscode.commands.executeCommand(`${CommitViewProvider.viewType}.focus`);
+  } catch (error) {
+    vscode.window.showErrorMessage(`Unable to open Commit Files: ${error.message}`);
+  }
+}
+
+async function openResolveConflicts(context, resource) {
+  try {
+    const target = await getGitTarget(resource);
+    await showConflictsDialog(context, target);
+  } catch (error) {
+    vscode.window.showErrorMessage(`Unable to open Resolve Conflicts: ${error.message}`);
+  }
+}
+
+async function getGitTarget(resource) {
+  const uri = resource || vscode.window.activeTextEditor?.document.uri || vscode.workspace.workspaceFolders?.[0]?.uri;
+  if (!uri || uri.scheme !== "file") {
+    throw new Error("Select a file or folder inside a Git repository first.");
+  }
+  const root = await findGitRoot(uri.fsPath);
+  const branch = await getCurrentBranch(root);
+  return {
+    root,
+    branch,
+    scopePath: uri.fsPath,
+    scopeName: path.basename(uri.fsPath) || root
+  };
+}
+
+class CommitViewProvider {
+  static viewType = "beautifulGit.commitView";
+
+  constructor(context) {
+    this.context = context;
+    this.view = undefined;
+    this.target = undefined;
+  }
+
+  resolveWebviewView(webviewView) {
+    this.view = webviewView;
+    webviewView.webview.options = {
+      enableScripts: true
+    };
+    webviewView.webview.html = getCommitViewHtml(webviewView.webview);
+    webviewView.webview.onDidReceiveMessage((message) => this.handleMessage(message));
+    this.refresh();
+  }
+
+  async setTarget(target) {
+    this.target = target;
+    await this.refresh();
+  }
+
+  async handleMessage(message) {
+    if (!message || typeof message.type !== "string") {
+      return;
+    }
+
+    if (message.type === "refresh") {
+      await this.refresh();
+      return;
+    }
+
+    if (message.type === "openFile") {
+      const file = message.file ? vscode.Uri.file(path.join(this.target.root, message.file)) : undefined;
+      if (file) {
+        await vscode.window.showTextDocument(file, { preview: true });
+      }
+      return;
+    }
+
+    if (message.type === "commit") {
+      await this.commit(message.files || [], message.message || "", Boolean(message.pushAfter));
+    }
+  }
+
+  async commit(files, message, pushAfter) {
+    if (!this.target) {
+      vscode.window.showWarningMessage("Select a Git directory first.");
+      return;
+    }
+    try {
+      await commitFiles(this.target.root, files, message);
+      if (pushAfter) {
+        await push(this.target.root);
+      }
+      vscode.window.showInformationMessage(pushAfter ? "Committed and pushed selected files." : "Committed selected files.");
+      await this.refresh();
+    } catch (error) {
+      vscode.window.showErrorMessage(error.message);
+    } finally {
+      this.post({ type: "busy", busy: false });
+    }
+  }
+
+  async refresh() {
+    if (!this.view) {
+      return;
+    }
+
+    if (!this.target) {
+      this.post({
+        type: "state",
+        target: null,
+        files: [],
+        error: "Right-click a directory and choose Git > Commit Files..."
+      });
+      return;
+    }
+
+    try {
+      const files = await getChangedFiles(this.target.root, this.target.scopePath);
+      this.post({
+        type: "state",
+        target: this.target,
+        files,
+        error: ""
+      });
+    } catch (error) {
+      this.post({
+        type: "state",
+        target: this.target,
+        files: [],
+        error: error.message
+      });
+    }
+  }
+
+  post(message) {
+    this.view?.webview.postMessage(message);
+  }
+}
+
+async function showConflictsDialog(context, target) {
+  const panel = vscode.window.createWebviewPanel(
+    "beautifulGitResolveConflicts",
+    "Resolve Conflicts",
+    vscode.ViewColumn.Active,
+    {
+      enableScripts: true,
+      retainContextWhenHidden: true
+    }
+  );
+
+  async function loadState() {
+    const files = await getConflictFiles(target.root, target.scopePath);
+    return {
+      target,
+      files,
+      count: files.length
+    };
+  }
+
+  async function render() {
+    panel.webview.html = getConflictsDialogHtml(panel.webview, await loadState());
+  }
+
+  await render();
+
+  panel.webview.onDidReceiveMessage(async (message) => {
+    if (!message || typeof message.type !== "string") {
+      return;
+    }
+
+    if (message.type === "close") {
+      panel.dispose();
+      return;
+    }
+
+    if (message.type === "refresh") {
+      await render();
+      return;
+    }
+
+    const relativePath = message.file;
+    if (!relativePath) {
+      return;
+    }
+    const uri = vscode.Uri.file(path.join(target.root, relativePath));
+
+    if (message.type === "openFile") {
+      await vscode.window.showTextDocument(uri, { preview: true });
+      return;
+    }
+
+    if (message.type === "merge") {
+      await openMergeResolver(context, uri);
+      return;
+    }
+
+    if (message.type === "acceptLeft" || message.type === "acceptRight") {
+      await acceptWholeFileSide(uri, message.type === "acceptLeft" ? "left" : "right");
+      await render();
+    }
+  });
+}
+
+async function acceptWholeFileSide(uri, side) {
+  const bytes = await vscode.workspace.fs.readFile(uri);
+  const text = Buffer.from(bytes).toString("utf8");
+  const parsed = parseConflictDocument(text);
+  if (parsed.conflictCount === 0) {
+    vscode.window.showInformationMessage("No conflict markers were found in this file.");
+    return;
+  }
+  const resolutions = {};
+  for (const conflict of parsed.conflicts) {
+    resolutions[conflict.id] = conflict[side];
+  }
+  await vscode.workspace.fs.writeFile(uri, Buffer.from(composeResolvedDocument(parsed.segments, resolutions), "utf8"));
+  vscode.window.showInformationMessage(`Accepted ${side === "left" ? "left" : "right"} changes for ${path.basename(uri.fsPath)}.`);
 }
 
 async function openMergeResolver(context, uri) {
@@ -121,6 +353,480 @@ async function revealDocumentLocation(uri, line) {
 
 function hasConflictMarkers(text) {
   return /^(<<<<<<<|=======|>>>>>>>)(?: .*)?$/mu.test(text);
+}
+
+function getCommitViewHtml(webview) {
+  const nonce = getNonce();
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}';">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Commit Files</title>
+  <style nonce="${nonce}">
+    :root {
+      color-scheme: dark;
+      --bg: #1f2125;
+      --panel: #25272c;
+      --line: #383b42;
+      --text: #cfd2d8;
+      --muted: #888e99;
+      --accent: #4b86e8;
+      --green: #6aab73;
+      --red: #c76d61;
+      --yellow: #d6b46c;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      height: 100vh;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--text);
+      font: 12px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    button, textarea, input {
+      font: inherit;
+    }
+    button {
+      min-height: 28px;
+      border: 1px solid #4a4e57;
+      border-radius: 4px;
+      background: #30333a;
+      color: var(--text);
+      cursor: pointer;
+    }
+    button:hover { background: #383c45; border-color: #6a707c; }
+    button.primary { background: #3f73d8; border-color: #4f83e9; color: white; }
+    .commit-tool {
+      display: grid;
+      grid-template-rows: auto auto minmax(0, 1fr) auto;
+      height: 100vh;
+      min-width: 0;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      min-height: 36px;
+      padding: 8px 10px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--line);
+      font-weight: 650;
+    }
+    .scope {
+      padding: 7px 10px;
+      color: var(--muted);
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .toolbar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 8px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    .toolbar button {
+      min-height: 24px;
+      padding: 2px 7px;
+    }
+    .files {
+      overflow: auto;
+      min-height: 0;
+    }
+    .empty {
+      padding: 18px 10px;
+      color: var(--muted);
+    }
+    .file-row {
+      display: grid;
+      grid-template-columns: 22px minmax(0, 1fr) auto;
+      gap: 6px;
+      align-items: center;
+      min-height: 30px;
+      padding: 3px 8px;
+      border-bottom: 1px solid rgba(255,255,255,0.035);
+    }
+    .file-row:hover { background: rgba(255,255,255,0.04); }
+    .name {
+      min-width: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      cursor: pointer;
+    }
+    .old {
+      display: block;
+      color: var(--muted);
+      font-size: 11px;
+    }
+    .badge {
+      justify-self: end;
+      border: 1px solid #4b5059;
+      border-radius: 4px;
+      padding: 1px 5px;
+      color: #c8ccd3;
+      font-size: 11px;
+    }
+    .badge.conflict { color: var(--red); border-color: rgba(199,109,97,0.5); }
+    .badge.added { color: var(--green); border-color: rgba(106,171,115,0.5); }
+    .badge.deleted { color: var(--red); border-color: rgba(199,109,97,0.5); }
+    .badge.unversioned { color: var(--yellow); border-color: rgba(214,180,108,0.5); }
+    .footer {
+      border-top: 1px solid var(--line);
+      background: var(--panel);
+      padding: 8px;
+    }
+    textarea {
+      width: 100%;
+      min-height: 82px;
+      resize: vertical;
+      border: 1px solid #4c515a;
+      border-radius: 4px;
+      outline: none;
+      background: #1e2024;
+      color: var(--text);
+      padding: 8px;
+      letter-spacing: 0;
+    }
+    textarea:focus { border-color: var(--accent); }
+    .actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    .hint {
+      margin-top: 6px;
+      min-height: 18px;
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+  <div class="commit-tool">
+    <div class="header"><span>Commit</span><button id="refresh">↻</button></div>
+    <div class="scope" id="scope">Select a Git directory</div>
+    <div>
+      <div class="toolbar">
+        <button id="all">All</button>
+        <button id="none">None</button>
+        <span id="count"></span>
+      </div>
+      <div class="files" id="files"></div>
+    </div>
+    <div class="footer">
+      <textarea id="message" placeholder="Commit Message"></textarea>
+      <div class="actions">
+        <button id="commit">Commit</button>
+        <button id="commitPush" class="primary">Commit & Push</button>
+      </div>
+      <div class="hint" id="hint"></div>
+    </div>
+  </div>
+  <script nonce="${nonce}">
+    const vscode = acquireVsCodeApi();
+    let state = { target: null, files: [], error: "" };
+    let selected = new Set();
+    const filesEl = document.getElementById("files");
+    const scopeEl = document.getElementById("scope");
+    const countEl = document.getElementById("count");
+    const hintEl = document.getElementById("hint");
+    const messageEl = document.getElementById("message");
+
+    window.addEventListener("message", (event) => {
+      const message = event.data;
+      if (message.type === "state") {
+        state = message;
+        selected = new Set(state.files.map((file) => file.path));
+        render();
+      }
+      if (message.type === "busy") {
+        setBusy(Boolean(message.busy));
+      }
+    });
+
+    document.getElementById("refresh").addEventListener("click", () => vscode.postMessage({ type: "refresh" }));
+    document.getElementById("all").addEventListener("click", () => {
+      selected = new Set(state.files.map((file) => file.path));
+      render();
+    });
+    document.getElementById("none").addEventListener("click", () => {
+      selected = new Set();
+      render();
+    });
+    document.getElementById("commit").addEventListener("click", () => commit(false));
+    document.getElementById("commitPush").addEventListener("click", () => commit(true));
+
+    filesEl.addEventListener("change", (event) => {
+      const checkbox = event.target.closest("input[data-file]");
+      if (!checkbox) {
+        return;
+      }
+      if (checkbox.checked) {
+        selected.add(checkbox.dataset.file);
+      } else {
+        selected.delete(checkbox.dataset.file);
+      }
+      updateCount();
+    });
+
+    filesEl.addEventListener("click", (event) => {
+      const name = event.target.closest("[data-open]");
+      if (name) {
+        vscode.postMessage({ type: "openFile", file: name.dataset.open });
+      }
+    });
+
+    function commit(pushAfter) {
+      const files = Array.from(selected);
+      if (files.length === 0) {
+        hintEl.textContent = "Select at least one file.";
+        return;
+      }
+      if (!messageEl.value.trim()) {
+        hintEl.textContent = "Commit message is required.";
+        messageEl.focus();
+        return;
+      }
+      setBusy(true);
+      vscode.postMessage({ type: "commit", files, message: messageEl.value, pushAfter });
+    }
+
+    function render() {
+      const targetLabel = state.target ? state.target.scopeName + " · " + state.target.branch : "No Git target";
+      scopeEl.textContent = state.error || targetLabel;
+      if (state.error) {
+        filesEl.innerHTML = '<div class="empty">' + escapeHtml(state.error) + "</div>";
+        updateCount();
+        return;
+      }
+      if (!state.files.length) {
+        filesEl.innerHTML = '<div class="empty">No local changes in this scope.</div>';
+        updateCount();
+        return;
+      }
+      filesEl.innerHTML = state.files.map((file) => {
+        const checked = selected.has(file.path) ? " checked" : "";
+        const badgeClass = file.label.toLowerCase().replace(/\\s+/g, "-");
+        const oldPath = file.oldPath ? '<span class="old">from ' + escapeHtml(file.oldPath) + "</span>" : "";
+        return '<label class="file-row">' +
+          '<input type="checkbox" data-file="' + escapeAttr(file.path) + '"' + checked + ">" +
+          '<span class="name" data-open="' + escapeAttr(file.path) + '">' + escapeHtml(file.path) + oldPath + "</span>" +
+          '<span class="badge ' + badgeClass + '">' + escapeHtml(file.label) + "</span>" +
+        "</label>";
+      }).join("");
+      updateCount();
+      hintEl.textContent = "";
+    }
+
+    function updateCount() {
+      countEl.textContent = selected.size + " / " + state.files.length + " selected";
+    }
+
+    function setBusy(busy) {
+      for (const button of document.querySelectorAll("button")) {
+        button.disabled = busy;
+      }
+      hintEl.textContent = busy ? "Running Git..." : "";
+    }
+
+    function escapeHtml(value) {
+      return String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    }
+
+    function escapeAttr(value) {
+      return escapeHtml(value).replace(/'/g, "&#39;");
+    }
+
+    vscode.postMessage({ type: "refresh" });
+  </script>
+</body>
+</html>`;
+}
+
+function getConflictsDialogHtml(webview, state) {
+  const nonce = getNonce();
+  const serializedState = JSON.stringify(state).replace(/</g, "\\u003c");
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}';">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Resolve Conflicts</title>
+  <style nonce="${nonce}">
+    :root {
+      color-scheme: dark;
+      --bg: #1f2125;
+      --dialog: #2b2d31;
+      --line: #3d4149;
+      --text: #d1d4da;
+      --muted: #8b909b;
+      --blue: #4b86e8;
+      --red: #c76d61;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: #1f2125;
+      color: var(--text);
+      font: 13px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    button {
+      min-height: 28px;
+      border: 1px solid #515762;
+      border-radius: 4px;
+      background: #30333a;
+      color: var(--text);
+      font: inherit;
+      cursor: pointer;
+      padding: 3px 10px;
+    }
+    button:hover { background: #383c45; border-color: #717783; }
+    button.primary { background: #3f73d8; border-color: #5287ee; color: white; }
+    .shell {
+      display: grid;
+      place-items: center;
+      min-height: 100vh;
+      padding: 24px;
+    }
+    .dialog {
+      width: min(860px, calc(100vw - 48px));
+      min-height: 430px;
+      background: var(--dialog);
+      border: 1px solid #4a4e57;
+      box-shadow: 0 18px 70px rgba(0,0,0,0.45);
+      display: grid;
+      grid-template-rows: auto auto minmax(0, 1fr) auto;
+    }
+    .title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+      font-weight: 650;
+      font-size: 14px;
+    }
+    .sub {
+      padding: 8px 14px;
+      color: var(--muted);
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    .list {
+      overflow: auto;
+      padding: 8px 0;
+      background: #24262b;
+    }
+    .row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 12px;
+      align-items: center;
+      min-height: 44px;
+      padding: 6px 14px;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+    }
+    .row:hover { background: rgba(255,255,255,0.04); }
+    .file {
+      min-width: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      letter-spacing: 0;
+    }
+    .meta {
+      color: var(--muted);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin-top: 2px;
+    }
+    .actions {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+    .empty {
+      padding: 36px 14px;
+      color: var(--muted);
+      text-align: center;
+    }
+    .footer {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      padding: 10px 14px;
+      border-top: 1px solid var(--line);
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <div class="dialog">
+      <div class="title">
+        <span>Resolve Conflicts</span>
+        <span id="count"></span>
+      </div>
+      <div class="sub" id="scope"></div>
+      <div class="list" id="list"></div>
+      <div class="footer">
+        <button data-action="refresh">Refresh</button>
+        <button data-action="close" class="primary">Close</button>
+      </div>
+    </div>
+  </div>
+  <script nonce="${nonce}">
+    const vscode = acquireVsCodeApi();
+    const state = ${serializedState};
+    const list = document.getElementById("list");
+    document.getElementById("scope").textContent = state.target.scopeName + " · " + state.target.branch;
+    document.getElementById("count").textContent = state.count + " conflict file" + (state.count === 1 ? "" : "s");
+    render();
+
+    document.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-action]");
+      if (!button) {
+        return;
+      }
+      vscode.postMessage({ type: button.dataset.action, file: button.dataset.file || "" });
+    });
+
+    function render() {
+      if (!state.files.length) {
+        list.innerHTML = '<div class="empty">No conflicted files in this directory.</div>';
+        return;
+      }
+      list.innerHTML = state.files.map((file) => {
+        return '<div class="row">' +
+          '<div><div class="file" title="' + escapeAttr(file.path) + '">' + escapeHtml(file.path) + '</div>' +
+          '<div class="meta">' + file.conflictCount + ' conflict block' + (file.conflictCount === 1 ? "" : "s") + '</div></div>' +
+          '<div class="actions">' +
+            '<button data-action="openFile" data-file="' + escapeAttr(file.path) + '">Open</button>' +
+            '<button data-action="acceptLeft" data-file="' + escapeAttr(file.path) + '">Accept Yours</button>' +
+            '<button data-action="acceptRight" data-file="' + escapeAttr(file.path) + '">Accept Theirs</button>' +
+            '<button class="primary" data-action="merge" data-file="' + escapeAttr(file.path) + '">Merge...</button>' +
+          '</div>' +
+        '</div>';
+      }).join("");
+    }
+
+    function escapeHtml(value) {
+      return String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    }
+
+    function escapeAttr(value) {
+      return escapeHtml(value).replace(/'/g, "&#39;");
+    }
+  </script>
+</body>
+</html>`;
 }
 
 function getWebviewHtml(webview, extensionUri, state) {
