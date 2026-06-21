@@ -25,6 +25,7 @@ async function run() {
     const blame = await getBlameAnnotations(root, path.join(root, "conflict.txt"));
     assert.strictEqual(blame.length, 1);
     assert.strictEqual(blame[0].author, "Test User");
+    assert(blame[0].authorTime > 0);
     assert.strictEqual(blame[0].summary, "base");
     git(["checkout", "-b", "feature"]);
     fs.writeFileSync(path.join(root, "conflict.txt"), "feature\n");

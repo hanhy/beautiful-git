@@ -254,6 +254,7 @@ class BlameAnnotationController {
   }
 
   applyAnnotations(editor, annotations) {
+    const palette = buildBlamePalette(annotations);
     const decorations = annotations
       .filter((annotation) => annotation.line >= 1 && annotation.line <= editor.document.lineCount)
       .map((annotation) => ({
@@ -261,10 +262,11 @@ class BlameAnnotationController {
         renderOptions: {
           before: {
             contentText: formatBlameAnnotation(annotation),
-            color: new vscode.ThemeColor("editorCodeLens.foreground"),
-            margin: "0 18px 0 0",
-            width: "34em",
-            textDecoration: "none; display: inline-block; opacity: 0.72;"
+            backgroundColor: palette.get(annotation.authorTime) || "rgba(47, 59, 88, 0.55)",
+            color: "rgba(205, 211, 224, 0.82)",
+            margin: "0 14px 0 0",
+            width: "17em",
+            textDecoration: "none; display: inline-block; padding: 0 7px; opacity: 1;"
           }
         }
       }));
@@ -279,9 +281,41 @@ class BlameAnnotationController {
 }
 
 function formatBlameAnnotation(annotation) {
-  const author = truncate(annotation.author || "Unknown", 18).padEnd(18, " ");
-  const summary = truncate(annotation.summary || "No commit message", 56);
-  return `${author}  ${summary}`;
+  const date = formatBlameDate(annotation.authorTime);
+  const author = truncate(annotation.author || "Unknown", 14);
+  return `${date}  ${author}`;
+}
+
+function formatBlameDate(authorTime) {
+  if (!authorTime) {
+    return "unknown";
+  }
+  const date = new Date(authorTime * 1000);
+  return `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()}`;
+}
+
+function buildBlamePalette(annotations) {
+  const times = [...new Set(annotations.map((annotation) => annotation.authorTime).filter(Boolean))].sort((a, b) => a - b);
+  const palette = new Map();
+  if (times.length === 0) {
+    return palette;
+  }
+  const min = times[0];
+  const max = times[times.length - 1];
+  for (const time of times) {
+    const ratio = max === min ? 0.45 : (time - min) / (max - min);
+    palette.set(time, blameBlue(ratio));
+  }
+  return palette;
+}
+
+function blameBlue(ratio) {
+  const clamped = Math.max(0, Math.min(1, ratio));
+  const alpha = 0.34 + clamped * 0.34;
+  const red = Math.round(42 + clamped * 25);
+  const green = Math.round(54 + clamped * 38);
+  const blue = Math.round(88 + clamped * 78);
+  return `rgba(${red}, ${green}, ${blue}, ${alpha.toFixed(2)})`;
 }
 
 function truncate(value, length) {

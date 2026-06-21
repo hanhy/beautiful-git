@@ -104,6 +104,7 @@ function parseBlamePorcelain(output) {
         hash: header[1],
         line: Number(header[2]),
         author: "",
+        authorTime: 0,
         summary: ""
       };
       continue;
@@ -115,6 +116,11 @@ function parseBlamePorcelain(output) {
 
     if (line.startsWith("author ")) {
       current.author = line.slice("author ".length);
+      continue;
+    }
+
+    if (line.startsWith("author-time ")) {
+      current.authorTime = Number(line.slice("author-time ".length)) || 0;
       continue;
     }
 

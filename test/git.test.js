@@ -22,10 +22,12 @@ const blame = parseBlamePorcelain([
   "0123456789012345678901234567890123456789 1 1 1",
   "author Ada Lovelace",
   "author-mail <ada@example.com>",
+  "author-time 1780000000",
   "summary Add repository routing",
   "\tpackage main",
   "abcdefabcdefabcdefabcdefabcdefabcdefabcd 2 2 1",
   "author Grace Hopper",
+  "author-time 1781000000",
   "summary Fix handler registration",
   "\tfunc main() {}",
   ""
@@ -34,7 +36,9 @@ const blame = parseBlamePorcelain([
 assert.strictEqual(blame.length, 2);
 assert.strictEqual(blame[0].line, 1);
 assert.strictEqual(blame[0].author, "Ada Lovelace");
+assert.strictEqual(blame[0].authorTime, 1780000000);
 assert.strictEqual(blame[0].summary, "Add repository routing");
 assert.strictEqual(blame[1].author, "Grace Hopper");
+assert.strictEqual(blame[1].authorTime, 1781000000);
 
 console.log("git tests passed");
