@@ -853,13 +853,10 @@ function getWebviewHtml(webview, extensionUri, state) {
       --text: #c9ccd1;
       --muted: #858a93;
       --blue: #4775ac;
-      --blue-soft: rgba(64, 116, 173, 0.32);
-      --blue-ribbon: rgba(69, 104, 142, 0.72);
-      --green-soft: rgba(63, 141, 86, 0.32);
-      --green-ribbon: rgba(58, 107, 75, 0.7);
-      --red-soft: rgba(139, 74, 65, 0.35);
-      --red-ribbon: rgba(105, 63, 58, 0.72);
-      --neutral-ribbon: rgba(92, 97, 101, 0.68);
+      --blue-ribbon: rgba(65, 100, 139, 0.78);
+      --green-ribbon: rgba(54, 94, 65, 0.78);
+      --gray-ribbon: rgba(76, 79, 84, 0.75);
+      --red-ribbon: rgba(103, 63, 57, 0.78);
       --yellow: #d7ba7d;
       --accent: #4b86e8;
       --danger: #d1867a;
@@ -981,66 +978,80 @@ function getWebviewHtml(webview, extensionUri, state) {
       position: relative;
       border-top: 1px solid rgba(255, 255, 255, 0.09);
       isolation: isolate;
-      --ribbon-fill: var(--neutral-ribbon);
-      --ribbon-line: rgba(165, 171, 178, 0.3);
+      --band-fill: var(--blue-ribbon);
+      --band-line: rgba(121, 160, 201, 0.38);
     }
 
-    .section.conflict.left-ribbon {
-      --ribbon-fill: var(--blue-ribbon);
-      --ribbon-line: rgba(121, 160, 201, 0.42);
+    .section.conflict.kind-changed {
+      --band-fill: var(--blue-ribbon);
+      --band-line: rgba(121, 160, 201, 0.38);
     }
 
-    .section.conflict.right-ribbon {
-      --ribbon-fill: var(--red-ribbon);
-      --ribbon-line: rgba(193, 124, 116, 0.38);
+    .section.conflict.kind-added {
+      --band-fill: var(--green-ribbon);
+      --band-line: rgba(106, 171, 115, 0.38);
     }
 
-    .section.conflict.result-ribbon {
-      --ribbon-fill: var(--green-ribbon);
-      --ribbon-line: rgba(106, 171, 115, 0.35);
+    .section.conflict.kind-deleted {
+      --band-fill: var(--gray-ribbon);
+      --band-line: rgba(165, 171, 178, 0.32);
     }
 
-    .merge-ribbon {
+    .section.conflict.kind-conflict {
+      --band-fill: var(--red-ribbon);
+      --band-line: rgba(193, 124, 116, 0.4);
+    }
+
+    .change-band {
       position: absolute;
       z-index: 1;
-      top: 34px;
-      height: 38px;
-      background: var(--ribbon-fill);
-      border-top: 1px solid var(--ribbon-line);
+      top: 26px;
+      bottom: 0;
+      background: var(--band-fill);
+      border-top: 1px solid var(--band-line);
       border-bottom: 1px solid rgba(0, 0, 0, 0.24);
       opacity: 0.95;
       pointer-events: none;
     }
 
-    .left-ribbon .merge-ribbon {
+    .left-ribbon .change-band {
       left: 30px;
       right: -1px;
       clip-path: polygon(0 0, calc(100% - 22px) 0, 100% 50%, calc(100% - 22px) 100%, 0 100%);
-      border-top-right-radius: 2px;
-      border-bottom-right-radius: 2px;
     }
 
-    .right-ribbon .merge-ribbon {
+    .right-ribbon .change-band {
       left: -1px;
       right: 30px;
       clip-path: polygon(22px 0, 100% 0, 100% 100%, 22px 100%, 0 50%);
-      border-top-left-radius: 2px;
-      border-bottom-left-radius: 2px;
     }
 
-    .result-ribbon .merge-ribbon {
+    .result-ribbon .change-band {
       left: 0;
       right: 0;
-      top: 42px;
-      height: 118px;
-      background: rgba(78, 86, 86, 0.74);
-      clip-path: polygon(28px 0, 100% 0, 100% 100%, 28px 100%, 0 50%);
+      top: 0;
+      clip-path: polygon(20px 0, calc(100% - 20px) 0, 100% 50%, calc(100% - 20px) 100%, 20px 100%, 0 50%);
+    }
+
+    .section.conflict.discarded .change-band {
+      background: transparent;
+      border: 1px dashed var(--band-line);
+      opacity: 1;
+      clip-path: none;
+      left: 34px;
+      right: 34px;
+      top: 29px;
+      bottom: 3px;
+    }
+
+    .section.conflict.discarded .line {
+      opacity: 0.58;
     }
 
     .ribbon-rail {
       position: absolute;
       z-index: 2;
-      top: 33px;
+      top: 28px;
       display: flex;
       align-items: center;
       gap: 4px;
@@ -1059,6 +1070,7 @@ function getWebviewHtml(webview, extensionUri, state) {
 
     .result-ribbon .ribbon-rail {
       left: 10px;
+      top: 2px;
       color: #aeb5bf;
     }
 
@@ -1143,35 +1155,13 @@ function getWebviewHtml(webview, extensionUri, state) {
     .source .marker { color: #a7b9d8; }
 
     .unchanged .source { color: #969ba4; }
-    .left-change .line { background: var(--blue-soft); }
-    .right-change .line { background: var(--red-soft); }
-    .result-change .line { background: var(--green-soft); }
+    .left-change .line,
+    .right-change .line,
+    .result-change .line { background: transparent; }
     .empty {
       padding: 18px 12px 18px 62px;
       color: var(--muted);
       font-style: italic;
-    }
-
-    textarea.result-editor {
-      position: relative;
-      z-index: 2;
-      width: calc(100% - 16px);
-      min-height: 120px;
-      margin: 8px;
-      resize: vertical;
-      border: 1px solid #515762;
-      border-radius: 3px;
-      outline: none;
-      background: #202328;
-      color: #d9dde5;
-      padding: 8px 10px;
-      font: 13px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
-      letter-spacing: 0;
-    }
-
-    textarea.result-editor:focus {
-      border-color: #5f93ea;
-      box-shadow: 0 0 0 1px rgba(95, 147, 234, 0.28);
     }
 
     .footer {
@@ -1244,6 +1234,7 @@ function getWebviewHtml(webview, extensionUri, state) {
     const vscode = acquireVsCodeApi();
     const mergeState = ${serializedState};
     const resolutions = Object.create(null);
+    const discarded = Object.create(null);
     let currentConflict = 0;
     let highlightWords = true;
     let displayMode = "normal";
@@ -1251,6 +1242,7 @@ function getWebviewHtml(webview, extensionUri, state) {
     for (const segment of mergeState.segments) {
       if (segment.type === "conflict") {
         resolutions[segment.id] = segment.left;
+        discarded[segment.id] = false;
       }
     }
 
@@ -1272,28 +1264,29 @@ function getWebviewHtml(webview, extensionUri, state) {
       const action = button.dataset.action;
       const id = Number(button.dataset.id);
       if (action === "left") {
-        setResolution(id, conflictById(id).left);
+        setResolution(id, conflictById(id).left, false);
       } else if (action === "right") {
-        setResolution(id, conflictById(id).right);
+        setResolution(id, conflictById(id).right, false);
       } else if (action === "empty") {
-        setResolution(id, "");
+        setResolution(id, "", true);
       } else if (action === "both") {
         const conflict = conflictById(id);
-        setResolution(id, ensureTrailingLineBreak(conflict.left) + conflict.right);
+        setResolution(id, ensureTrailingLineBreak(conflict.left) + conflict.right, false);
       } else if (action === "all-left") {
         for (const conflict of conflicts()) {
           resolutions[conflict.id] = conflict.left;
+          discarded[conflict.id] = false;
         }
         render();
         markDirty("All conflicts set to left");
       } else if (action === "all-right") {
         for (const conflict of conflicts()) {
           resolutions[conflict.id] = conflict.right;
+          discarded[conflict.id] = false;
         }
         render();
         markDirty("All conflicts set to right");
       } else if (action === "apply") {
-        syncTextareas();
         vscode.postMessage({ type: "apply", resolutions });
       } else if (action === "cancel") {
         vscode.postMessage({ type: "cancel" });
@@ -1315,14 +1308,6 @@ function getWebviewHtml(webview, extensionUri, state) {
       render();
     });
 
-    document.addEventListener("input", (event) => {
-      if (!event.target.matches("textarea[data-id]")) {
-        return;
-      }
-      resolutions[Number(event.target.dataset.id)] = event.target.value;
-      markDirty("Edited result");
-    });
-
     function render() {
       panes.left.innerHTML = paneHeader("Changes from " + firstLabel("leftLabel"), true) + renderSide("left");
       panes.result.innerHTML = paneHeader("Result", false) + renderResult();
@@ -1342,8 +1327,10 @@ function getWebviewHtml(webview, extensionUri, state) {
         const cls = side === "left" ? "left-change" : "right-change";
         const ribbonClass = side === "left" ? "left-ribbon" : "right-ribbon";
         const arrow = side === "left" ? "»" : "«";
+        const kind = conflictKind(segment);
+        const discardedClass = discarded[segment.id] ? " discarded" : "";
         return section(
-          ribbonMarkup(segment, action, arrow) +
+          ribbonMarkup(segment, side, action, arrow) +
           '<div class="section-title">' +
             '<span>#' + (segment.id + 1) + " " + escapeHtml(label || side) + "</span>" +
             '<span class="actions">' +
@@ -1352,7 +1339,7 @@ function getWebviewHtml(webview, extensionUri, state) {
             "</span>" +
           "</div>" +
           codeBlock(text, segment.startLine + 1, cls),
-          "conflict " + ribbonClass,
+          "conflict " + ribbonClass + " kind-" + kind + discardedClass,
           "conflict-" + segment.id + "-" + side
         );
       }).join("");
@@ -1364,31 +1351,43 @@ function getWebviewHtml(webview, extensionUri, state) {
           return section(codeBlock(segment.text, "", "unchanged"));
         }
         const value = resolutions[segment.id] ?? segment.left;
+        const kind = conflictKind(segment);
+        const discardedClass = discarded[segment.id] ? " discarded" : "";
         return section(
-          '<div class="merge-ribbon"></div><div class="ribbon-rail"><span class="ribbon-line-number">' + segment.startLine + '</span></div>' +
-          '<div class="section-title">' +
-            '<span>#' + (segment.id + 1) + " resolved text</span>" +
-            '<span class="actions">' +
-              '<button data-action="left" data-id="' + segment.id + '">Left</button>' +
-              '<button data-action="right" data-id="' + segment.id + '">Right</button>' +
-              '<button data-action="both" data-id="' + segment.id + '">Both</button>' +
-            "</span>" +
-          "</div>" +
-          '<textarea class="result-editor" data-id="' + segment.id + '" spellcheck="false">' + escapeHtml(value) + "</textarea>" +
+          '<div class="change-band"></div><div class="ribbon-rail"><span class="ribbon-line-number">' + segment.startLine + '</span></div>' +
           codeBlock(value, segment.startLine + 1, "result-change"),
-          "conflict result-ribbon",
+          "conflict result-ribbon kind-" + kind + discardedClass,
           "conflict-" + segment.id + "-result"
         );
       }).join("");
     }
 
-    function ribbonMarkup(segment, action, arrow) {
-      return '<div class="merge-ribbon"></div>' +
+    function ribbonMarkup(segment, side, action, arrow) {
+      const controls = side === "right"
+        ? '<button data-action="' + action + '" data-id="' + segment.id + '" title="Accept this block">' + arrow + '</button>' +
+          '<button data-action="empty" data-id="' + segment.id + '" title="Discard this block">×</button>'
+        : '<button data-action="empty" data-id="' + segment.id + '" title="Discard this block">×</button>' +
+          '<button data-action="' + action + '" data-id="' + segment.id + '" title="Accept this block">' + arrow + '</button>';
+      return '<div class="change-band"></div>' +
         '<div class="ribbon-rail">' +
-          '<button data-action="empty" data-id="' + segment.id + '" title="Remove this block">×</button>' +
-          '<button data-action="' + action + '" data-id="' + segment.id + '" title="Accept this block">' + arrow + '</button>' +
+          controls +
           '<span class="ribbon-line-number">' + segment.startLine + '</span>' +
         '</div>';
+    }
+
+    function conflictKind(segment) {
+      const left = segment.left.trim();
+      const right = segment.right.trim();
+      if (left && right && left !== right) {
+        return "conflict";
+      }
+      if (!left && right) {
+        return "added";
+      }
+      if (left && !right) {
+        return "deleted";
+      }
+      return "changed";
     }
 
     function paneHeader(title, showDetails) {
@@ -1434,10 +1433,11 @@ function getWebviewHtml(webview, extensionUri, state) {
       return escaped || " ";
     }
 
-    function setResolution(id, value) {
+    function setResolution(id, value, isDiscarded) {
       resolutions[id] = value;
+      discarded[id] = Boolean(isDiscarded);
       render();
-      markDirty("Updated conflict #" + (id + 1));
+      markDirty(isDiscarded ? "Discarded change #" + (id + 1) : "Updated conflict #" + (id + 1));
       jumpToConflict(id);
     }
 
@@ -1468,12 +1468,6 @@ function getWebviewHtml(webview, extensionUri, state) {
           }
           syncing = false;
         };
-      }
-    }
-
-    function syncTextareas() {
-      for (const textarea of document.querySelectorAll("textarea[data-id]")) {
-        resolutions[Number(textarea.dataset.id)] = textarea.value;
       }
     }
 
