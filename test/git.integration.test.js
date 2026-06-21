@@ -24,9 +24,13 @@ async function run() {
     git(["branch", "-M", "main"]);
     git(["checkout", "-b", "feature"]);
     fs.writeFileSync(path.join(root, "conflict.txt"), "feature\n");
+    fs.writeFileSync(path.join(root, "resolved-but-unstaged.txt"), "feature\n");
+    git(["add", "resolved-but-unstaged.txt"]);
     git(["commit", "-am", "feature"]);
     git(["checkout", "main"]);
     fs.writeFileSync(path.join(root, "conflict.txt"), "main\n");
+    fs.writeFileSync(path.join(root, "resolved-but-unstaged.txt"), "main\n");
+    git(["add", "resolved-but-unstaged.txt"]);
     git(["commit", "-am", "main"]);
 
     try {
@@ -36,10 +40,12 @@ async function run() {
     }
 
     fs.writeFileSync(path.join(root, "notes.txt"), "new\n");
+    fs.writeFileSync(path.join(root, "resolved-but-unstaged.txt"), "manual resolution without markers\n");
     const changes = await getChangedFiles(root, root);
     const conflicts = await getConflictFiles(root, root);
 
     assert(changes.some((file) => file.path === "conflict.txt" && file.isConflict));
+    assert(changes.some((file) => file.path === "resolved-but-unstaged.txt" && file.isConflict));
     assert(changes.some((file) => file.path === "notes.txt" && file.label === "Unversioned"));
     assert.strictEqual(conflicts.length, 1);
     assert.strictEqual(conflicts[0].path, "conflict.txt");

@@ -60,11 +60,13 @@ async function getConflictFiles(root, scopePath, readFile) {
     } catch {
       conflictCount = 0;
     }
-    result.push({
-      path: relativePath,
-      absolutePath,
-      conflictCount
-    });
+    if (conflictCount > 0) {
+      result.push({
+        path: relativePath,
+        absolutePath,
+        conflictCount
+      });
+    }
   }
   return result;
 }

@@ -1018,10 +1018,8 @@ function getWebviewHtml(webview, extensionUri, state) {
       position: absolute;
       z-index: 1;
       top: 26px;
-      bottom: 0;
+      height: 2px;
       background: var(--band-fill);
-      border-top: 1px solid var(--band-line);
-      border-bottom: 1px solid rgba(0, 0, 0, 0.24);
       opacity: 0.95;
       pointer-events: none;
     }
@@ -1073,32 +1071,36 @@ function getWebviewHtml(webview, extensionUri, state) {
       position: absolute;
       z-index: 1;
       top: 26px;
-      bottom: 0;
+      height: 2px;
       left: 0;
       right: 0;
       background: var(--band-fill);
-      border-top: 1px solid var(--band-line);
-      border-bottom: 1px solid rgba(0, 0, 0, 0.24);
       opacity: 0.95;
       pointer-events: none;
     }
 
     .left-gap .merge-gap-section .change-band {
-      clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 50%, calc(100% - 14px) 100%, 0 100%);
+      clip-path: none;
     }
 
     .right-gap .merge-gap-section .change-band {
-      clip-path: polygon(14px 0, 100% 0, 100% 100%, 14px 100%, 0 50%);
+      clip-path: none;
     }
 
     .merge-gap-section.discarded .change-band {
       background: transparent;
-      border: 1px dashed var(--band-line);
+      border-top: 2px dashed var(--band-line);
       clip-path: none;
       left: 5px;
       right: 5px;
       top: 29px;
-      bottom: 3px;
+      height: 0;
+    }
+
+    .merge-gap-section.accepted .change-band {
+      background: transparent;
+      border-top: 2px dashed var(--band-line);
+      height: 0;
     }
 
     .gap-title {
@@ -1119,17 +1121,30 @@ function getWebviewHtml(webview, extensionUri, state) {
 
     .section.conflict.discarded .change-band {
       background: transparent;
-      border: 1px dashed var(--band-line);
+      border-top: 2px dashed var(--band-line);
       opacity: 1;
       clip-path: none;
       left: 34px;
       right: 34px;
       top: 29px;
-      bottom: 3px;
+      height: 0;
+    }
+
+    .section.conflict.accepted .change-band {
+      background: transparent;
+      border-top: 2px dashed var(--band-line);
+      opacity: 1;
+      height: 0;
     }
 
     .section.conflict.discarded .line {
       opacity: 0.58;
+    }
+
+    .result-ribbon.discarded .change-band {
+      left: 5px;
+      right: 5px;
+      top: 3px;
     }
 
     .ribbon-rail {
@@ -1322,6 +1337,7 @@ function getWebviewHtml(webview, extensionUri, state) {
     const mergeState = ${serializedState};
     const resolutions = Object.create(null);
     const discarded = Object.create(null);
+    const accepted = Object.create(null);
     let currentConflict = 0;
     let highlightWords = true;
     let displayMode = "normal";
@@ -1330,6 +1346,7 @@ function getWebviewHtml(webview, extensionUri, state) {
       if (segment.type === "conflict") {
         resolutions[segment.id] = segment.left;
         discarded[segment.id] = false;
+        accepted[segment.id] = false;
       }
     }
 
@@ -1353,18 +1370,19 @@ function getWebviewHtml(webview, extensionUri, state) {
       const action = button.dataset.action;
       const id = Number(button.dataset.id);
       if (action === "left") {
-        setResolution(id, conflictById(id).left, false);
+        setResolution(id, conflictById(id).left, false, true);
       } else if (action === "right") {
-        setResolution(id, conflictById(id).right, false);
+        setResolution(id, conflictById(id).right, false, true);
       } else if (action === "empty") {
-        setResolution(id, "", true);
+        setResolution(id, "", true, true);
       } else if (action === "both") {
         const conflict = conflictById(id);
-        setResolution(id, ensureTrailingLineBreak(conflict.left) + conflict.right, false);
+        setResolution(id, ensureTrailingLineBreak(conflict.left) + conflict.right, false, true);
       } else if (action === "all-left") {
         for (const conflict of conflicts()) {
           resolutions[conflict.id] = conflict.left;
           discarded[conflict.id] = false;
+          accepted[conflict.id] = true;
         }
         render();
         markDirty("All conflicts set to left");
@@ -1372,6 +1390,7 @@ function getWebviewHtml(webview, extensionUri, state) {
         for (const conflict of conflicts()) {
           resolutions[conflict.id] = conflict.right;
           discarded[conflict.id] = false;
+          accepted[conflict.id] = true;
         }
         render();
         markDirty("All conflicts set to right");
@@ -1420,6 +1439,7 @@ function getWebviewHtml(webview, extensionUri, state) {
         const arrow = side === "left" ? "»" : "«";
         const kind = conflictKind(segment);
         const discardedClass = discarded[segment.id] ? " discarded" : "";
+        const acceptedClass = accepted[segment.id] ? " accepted" : "";
         return section(
           ribbonMarkup(segment, side, action, arrow) +
           '<div class="section-title">' +
@@ -1430,7 +1450,7 @@ function getWebviewHtml(webview, extensionUri, state) {
             "</span>" +
           "</div>" +
           codeBlock(text, segment.startLine + 1, cls),
-          "conflict " + ribbonClass + " kind-" + kind + discardedClass,
+          "conflict " + ribbonClass + " kind-" + kind + discardedClass + acceptedClass,
           "conflict-" + segment.id + "-" + side
         );
       }).join("");
@@ -1444,10 +1464,11 @@ function getWebviewHtml(webview, extensionUri, state) {
         const value = resolutions[segment.id] ?? segment.left;
         const kind = conflictKind(segment);
         const discardedClass = discarded[segment.id] ? " discarded" : "";
+        const acceptedClass = accepted[segment.id] ? " accepted" : "";
         return section(
           '<div class="change-band"></div><div class="ribbon-rail"><span class="ribbon-line-number">' + segment.startLine + '</span></div>' +
           codeBlock(value, segment.startLine + 1, "result-change"),
-          "conflict result-ribbon kind-" + kind + discardedClass,
+          "conflict result-ribbon kind-" + kind + discardedClass + acceptedClass,
           "conflict-" + segment.id + "-result"
         );
       }).join("");
@@ -1461,9 +1482,10 @@ function getWebviewHtml(webview, extensionUri, state) {
         const sideText = side === "left" ? segment.left : segment.right;
         const kind = conflictKind(segment);
         const discardedClass = discarded[segment.id] ? " discarded" : "";
+        const acceptedClass = accepted[segment.id] ? " accepted" : "";
         return gapSection(
           '<div class="change-band"></div><div class="gap-title"></div>' + gapSpacer(sideText),
-          "kind-" + kind + discardedClass
+          "kind-" + kind + discardedClass + acceptedClass
         );
       }).join("");
     }
@@ -1564,9 +1586,10 @@ function getWebviewHtml(webview, extensionUri, state) {
       return escaped || " ";
     }
 
-    function setResolution(id, value, isDiscarded) {
+    function setResolution(id, value, isDiscarded, isAccepted) {
       resolutions[id] = value;
       discarded[id] = Boolean(isDiscarded);
+      accepted[id] = Boolean(isAccepted);
       render();
       markDirty(isDiscarded ? "Discarded change #" + (id + 1) : "Updated conflict #" + (id + 1));
       jumpToConflict(id);
