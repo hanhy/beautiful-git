@@ -8,6 +8,7 @@ A local VS Code extension that opens Git conflict-marker files in an IntelliJ ID
 - IntelliJ IDEA-style directory context menu: `Git > Commit Files...` and `Git > Resolve Conflicts...`.
 - Sidebar commit panel with changed-file checkboxes, commit message input, `Commit`, and `Commit & Push`.
 - Resolve Conflicts dialog listing all conflicted files in the selected directory.
+- Line-number gutter action to toggle per-line Git blame annotations.
 - Opens from the editor title or Explorer context menu.
 - Parses standard Git conflict markers, including optional `||||||| base` sections.
 - Accept one conflict from the left or right side, accept both, or apply all left/right changes.
@@ -85,12 +86,22 @@ Use this if you want to modify or debug the extension.
 
 You can also right-click a file in the Explorer and choose `Open in IDEA Merge Resolver`.
 
+### Git Blame Annotations
+
+1. Open a tracked file in a Git repository.
+2. Right-click the editor line-number gutter.
+3. Choose `Annotate with Git Blame`.
+4. Each line shows the most recent commit author and commit summary before the code.
+5. Right-click the line-number gutter again and choose `Close Annotation` to hide it.
+
 ## Commands
 
 - `IDEA Merge Resolver: Open Current File`
 - `Open in IDEA Merge Resolver`
 - `Commit Files...`
 - `Resolve Conflicts...`
+- `Annotate with Git Blame`
+- `Close Annotation`
 
 ## Development
 

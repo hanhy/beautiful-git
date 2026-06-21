@@ -11,13 +11,15 @@
     "SCM Providers",
     "Other"
   ],
-  "activationEvents": [
-    "onCommand:ideaMergeResolver.open",
-    "onCommand:ideaMergeResolver.openResource",
-    "onCommand:beautifulGit.commitFiles",
-    "onCommand:beautifulGit.resolveConflicts",
-    "onView:beautifulGit.commitView"
-  ],
+    "activationEvents": [
+      "onCommand:ideaMergeResolver.open",
+      "onCommand:ideaMergeResolver.openResource",
+      "onCommand:beautifulGit.commitFiles",
+      "onCommand:beautifulGit.resolveConflicts",
+      "onCommand:beautifulGit.annotateBlame",
+      "onCommand:beautifulGit.closeAnnotation",
+      "onView:beautifulGit.commitView"
+    ],
   "main": "./src/extension.js",
   "contributes": {
     "viewsContainers": {
@@ -59,9 +61,29 @@
       {
         "command": "beautifulGit.resolveConflicts",
         "title": "Resolve Conflicts..."
+      },
+      {
+        "command": "beautifulGit.annotateBlame",
+        "title": "Annotate with Git Blame"
+      },
+      {
+        "command": "beautifulGit.closeAnnotation",
+        "title": "Close Annotation"
       }
     ],
     "menus": {
+      "editor/lineNumber/context": [
+        {
+          "command": "beautifulGit.annotateBlame",
+          "when": "resourceScheme == file && !beautifulGit.annotationVisible",
+          "group": "navigation@10"
+        },
+        {
+          "command": "beautifulGit.closeAnnotation",
+          "when": "resourceScheme == file && beautifulGit.annotationVisible",
+          "group": "navigation@10"
+        }
+      ],
       "editor/title": [
         {
           "command": "ideaMergeResolver.open",

@@ -71,6 +71,12 @@ async function getConflictFiles(root, scopePath, readFile) {
   return result;
 }
 
+async function getBlameAnnotations(root, filePath) {
+  const relativePath = path.relative(root, filePath);
+  const output = await runGit(root, ["blame", "--line-porcelain", "--", relativePath]);
+  return parseBlamePorcelain(output);
+}
+
 async function commitFiles(root, files, message) {
   if (!Array.isArray(files) || files.length === 0) {
     throw new Error("Select at least one file to commit.");
@@ -84,6 +90,46 @@ async function commitFiles(root, files, message) {
 
 async function push(root) {
   return runGit(root, ["push"]);
+}
+
+function parseBlamePorcelain(output) {
+  const annotations = [];
+  const lines = output.split(/\r?\n/u);
+  let current = null;
+
+  for (const line of lines) {
+    const header = /^([0-9a-f]{40}) \d+ (\d+)(?: \d+)?$/u.exec(line);
+    if (header) {
+      current = {
+        hash: header[1],
+        line: Number(header[2]),
+        author: "",
+        summary: ""
+      };
+      continue;
+    }
+
+    if (!current) {
+      continue;
+    }
+
+    if (line.startsWith("author ")) {
+      current.author = line.slice("author ".length);
+      continue;
+    }
+
+    if (line.startsWith("summary ")) {
+      current.summary = line.slice("summary ".length);
+      continue;
+    }
+
+    if (line.startsWith("\t")) {
+      annotations[current.line - 1] = current;
+      current = null;
+    }
+  }
+
+  return annotations.filter(Boolean);
 }
 
 function parsePorcelainStatus(output) {
@@ -166,9 +212,11 @@ function appendPathspec(args, root, scopePath) {
 module.exports = {
   commitFiles,
   findGitRoot,
+  getBlameAnnotations,
   getChangedFiles,
   getConflictFiles,
   getCurrentBranch,
+  parseBlamePorcelain,
   parsePorcelainStatus,
   push,
   runGit,
