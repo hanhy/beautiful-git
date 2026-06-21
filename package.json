@@ -1,0 +1,51 @@
+{
+  "name": "idea-merge-resolver",
+  "displayName": "IDEA Merge Resolver",
+  "description": "Resolve Git merge conflicts in an IntelliJ IDEA-style three-pane merge editor.",
+  "version": "0.1.0",
+  "publisher": "local",
+  "engines": {
+    "vscode": "^1.92.0"
+  },
+  "categories": [
+    "SCM Providers",
+    "Other"
+  ],
+  "activationEvents": [
+    "onCommand:ideaMergeResolver.open",
+    "onCommand:ideaMergeResolver.openResource"
+  ],
+  "main": "./src/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "ideaMergeResolver.open",
+        "title": "IDEA Merge Resolver: Open Current File"
+      },
+      {
+        "command": "ideaMergeResolver.openResource",
+        "title": "Open in IDEA Merge Resolver"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "ideaMergeResolver.open",
+          "group": "navigation@90"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "ideaMergeResolver.openResource",
+          "when": "resourceScheme == file",
+          "group": "navigation@90"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "test": "node test/parser.test.js",
+    "check": "node --check src/extension.js && node --check src/conflictParser.js"
+  },
+  "devDependencies": {}
+}

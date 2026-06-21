@@ -1,0 +1,24 @@
+<procedure title="Generate GPG key">
+  <p>
+<<<<<<< HEAD
+    Here is how you can create a key with terminal prompts.
+=======
+    If there are no keys yet, generate a fresh key pair.
+>>>>>>> feature/gpg-docs
+  </p>
+  <step>
+    <p>Open <control>Terminal</control>.</p>
+  </step>
+<<<<<<< HEAD
+  <list type="bullet">
+    <li><emphasis>Name</emphasis></li>
+    <li><emphasis>Type</emphasis></li>
+  </list>
+=======
+  <list type="bullet">
+    <li><emphasis>Type of key</emphasis></li>
+    <li><emphasis>Key size</emphasis></li>
+    <li><emphasis>Key valid time</emphasis></li>
+  </list>
+>>>>>>> feature/gpg-docs
+</procedure>
