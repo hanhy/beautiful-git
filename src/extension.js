@@ -286,6 +286,7 @@ class BlameAnnotationController {
 
   applyAnnotations(editor, annotations) {
     const palette = buildBlamePalette(annotations);
+    const annotationWidth = getBlameAnnotationWidth(annotations);
     const decorations = annotations
       .filter((annotation) => annotation.line >= 1 && annotation.line <= editor.document.lineCount)
       .map((annotation) => ({
@@ -296,7 +297,7 @@ class BlameAnnotationController {
             backgroundColor: palette.get(annotation.authorTime) || "rgba(47, 59, 88, 0.55)",
             color: "rgba(205, 211, 224, 0.82)",
             margin: "0 14px 0 0",
-            width: "17em",
+            width: annotationWidth,
             textDecoration: "none; display: inline-block; padding: 0 7px; opacity: 1;"
           }
         }
@@ -313,6 +314,14 @@ function formatBlameAnnotation(annotation) {
   const date = formatBlameDate(annotation.authorTime);
   const author = truncate(annotation.author || "Unknown", 14);
   return `${date}  ${author}`;
+}
+
+function getBlameAnnotationWidth(annotations) {
+  const longest = annotations.reduce((max, annotation) => {
+    return Math.max(max, formatBlameAnnotation(annotation).length);
+  }, 0);
+  const width = Math.max(10, Math.min(24, longest + 1));
+  return `${width}ch`;
 }
 
 function formatBlameDate(authorTime) {
