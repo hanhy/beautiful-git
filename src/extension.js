@@ -24,10 +24,11 @@ function activate(context) {
     vscode.commands.registerCommand("ideaMergeResolver.openResource", (resource) => openFromResource(context, resource)),
     vscode.commands.registerCommand("beautifulGit.commitFiles", (resource) => openCommitFiles(commitViewProvider, resource)),
     vscode.commands.registerCommand("beautifulGit.resolveConflicts", (resource) => openResolveConflicts(context, resource)),
-    vscode.commands.registerCommand("beautifulGit.annotateBlame", () => blameAnnotationController.annotateActiveEditor()),
-    vscode.commands.registerCommand("beautifulGit.closeAnnotation", () => blameAnnotationController.closeActiveEditor()),
-    vscode.window.onDidChangeActiveTextEditor(() => blameAnnotationController.updateContext()),
-    vscode.window.onDidChangeVisibleTextEditors(() => blameAnnotationController.reapplyVisibleAnnotations())
+    vscode.commands.registerCommand("beautifulGit.annotateBlame", () => blameAnnotationController.enable()),
+    vscode.commands.registerCommand("beautifulGit.closeAnnotation", () => blameAnnotationController.disable()),
+    vscode.window.onDidChangeActiveTextEditor(() => blameAnnotationController.reapplyVisibleAnnotations()),
+    vscode.window.onDidChangeVisibleTextEditors(() => blameAnnotationController.reapplyVisibleAnnotations()),
+    vscode.workspace.onDidSaveTextDocument((document) => blameAnnotationController.refreshDocument(document))
   );
   blameAnnotationController.updateContext();
 }
@@ -193,7 +194,9 @@ class CommitViewProvider {
 class BlameAnnotationController {
   constructor(context) {
     this.context = context;
-    this.annotatedFiles = new Map();
+    this.enabled = false;
+    this.annotationCache = new Map();
+    this.pending = new Set();
     this.decorationType = vscode.window.createTextEditorDecorationType({
       rangeBehavior: vscode.DecorationRangeBehavior.ClosedClosed,
       before: {
@@ -205,52 +208,80 @@ class BlameAnnotationController {
     context.subscriptions.push(this.decorationType);
   }
 
-  async annotateActiveEditor() {
+  async enable() {
     const editor = vscode.window.activeTextEditor;
     if (!editor || editor.document.uri.scheme !== "file") {
       vscode.window.showWarningMessage("Open a tracked file before enabling Git blame annotations.");
       return;
     }
-
-    try {
-      const root = await findGitRoot(editor.document.uri.fsPath);
-      const annotations = await getBlameAnnotations(root, editor.document.uri.fsPath);
-      if (annotations.length === 0) {
-        vscode.window.showInformationMessage("No Git blame information was found for this file.");
-        return;
-      }
-      this.annotatedFiles.set(editor.document.uri.toString(), annotations);
-      this.applyAnnotations(editor, annotations);
-      await this.updateContext();
-    } catch (error) {
-      vscode.window.showErrorMessage(`Unable to annotate with Git blame: ${error.message}`);
-    }
+    this.enabled = true;
+    await this.updateContext();
+    await this.reapplyVisibleAnnotations();
   }
 
-  async closeActiveEditor() {
-    const editor = vscode.window.activeTextEditor;
-    if (!editor || editor.document.uri.scheme !== "file") {
-      return;
-    }
-    this.annotatedFiles.delete(editor.document.uri.toString());
+  async disable() {
+    this.enabled = false;
+    this.annotationCache.clear();
+    this.pending.clear();
     for (const visibleEditor of vscode.window.visibleTextEditors) {
-      if (visibleEditor.document.uri.toString() === editor.document.uri.toString()) {
-        visibleEditor.setDecorations(this.decorationType, []);
-      }
+      visibleEditor.setDecorations(this.decorationType, []);
     }
     await this.updateContext();
   }
 
-  reapplyVisibleAnnotations() {
+  async reapplyVisibleAnnotations() {
+    await this.updateContext();
+    if (!this.enabled) {
+      for (const editor of vscode.window.visibleTextEditors) {
+        editor.setDecorations(this.decorationType, []);
+      }
+      return;
+    }
+
+    await Promise.all(vscode.window.visibleTextEditors.map((editor) => this.annotateEditor(editor)));
+  }
+
+  async refreshDocument(document) {
+    if (!this.enabled || document.uri.scheme !== "file") {
+      return;
+    }
+    this.annotationCache.delete(document.uri.toString());
     for (const editor of vscode.window.visibleTextEditors) {
-      const annotations = this.annotatedFiles.get(editor.document.uri.toString());
-      if (annotations) {
+      if (editor.document.uri.toString() === document.uri.toString()) {
+        await this.annotateEditor(editor);
+      }
+    }
+  }
+
+  async annotateEditor(editor) {
+    if (!editor || editor.document.uri.scheme !== "file") {
+      return;
+    }
+
+    const key = editor.document.uri.toString();
+    if (this.annotationCache.has(key)) {
+      this.applyAnnotations(editor, this.annotationCache.get(key));
+      return;
+    }
+    if (this.pending.has(key)) {
+      return;
+    }
+
+    this.pending.add(key);
+    try {
+      const root = await findGitRoot(editor.document.uri.fsPath);
+      const annotations = await getBlameAnnotations(root, editor.document.uri.fsPath);
+      if (annotations.length > 0) {
+        this.annotationCache.set(key, annotations);
         this.applyAnnotations(editor, annotations);
       } else {
         editor.setDecorations(this.decorationType, []);
       }
+    } catch {
+      editor.setDecorations(this.decorationType, []);
+    } finally {
+      this.pending.delete(key);
     }
-    this.updateContext();
   }
 
   applyAnnotations(editor, annotations) {
@@ -274,9 +305,7 @@ class BlameAnnotationController {
   }
 
   async updateContext() {
-    const editor = vscode.window.activeTextEditor;
-    const visible = Boolean(editor && this.annotatedFiles.has(editor.document.uri.toString()));
-    await vscode.commands.executeCommand("setContext", "beautifulGit.annotationVisible", visible);
+    await vscode.commands.executeCommand("setContext", "beautifulGit.annotationVisible", this.enabled);
   }
 }
 

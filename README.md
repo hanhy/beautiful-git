@@ -91,8 +91,9 @@ You can also right-click a file in the Explorer and choose `Open in IDEA Merge R
 1. Open a tracked file in a Git repository.
 2. Right-click the editor line-number gutter or the editor body.
 3. Choose `Annotate with Git Blame`.
-4. Each line shows the most recent commit date and author before the code. Newer commits use a deeper blue background.
-5. Right-click again and choose `Close Annotation` to hide it.
+4. Annotation is enabled for all visible and newly opened tracked files in the workspace.
+5. Each line shows the most recent commit date and author before the code. Newer commits use a deeper blue background.
+6. Right-click again and choose `Close Annotation` to hide annotations everywhere.
 
 ## Commands
 
