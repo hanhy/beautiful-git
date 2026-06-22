@@ -74,10 +74,67 @@ async function openResolveConflicts(context, resource) {
 }
 
 async function getGitTarget(resource) {
-  const uri = resource || vscode.window.activeTextEditor?.document.uri || vscode.workspace.workspaceFolders?.[0]?.uri;
-  if (!uri || uri.scheme !== "file") {
-    throw new Error("Select a file or folder inside a Git repository first.");
+  const candidates = getGitTargetCandidates(resource);
+  let lastError = undefined;
+
+  for (const uri of candidates) {
+    try {
+      return await buildGitTarget(uri);
+    } catch (error) {
+      lastError = error;
+    }
   }
+
+  const discoveredTargets = await discoverWorkspaceGitTargets();
+  if (discoveredTargets.length === 1) {
+    return discoveredTargets[0];
+  }
+  if (discoveredTargets.length > 1) {
+    const picked = await vscode.window.showQuickPick(
+      discoveredTargets.map((target) => ({
+        label: target.scopeName,
+        description: target.branch,
+        detail: target.root,
+        target
+      })),
+      { placeHolder: "Select a Git repository" }
+    );
+    if (picked) {
+      return picked.target;
+    }
+  }
+
+  const suffix = lastError?.message ? ` Last Git error: ${lastError.message}` : "";
+  throw new Error(`Open a file or folder inside a Git repository first.${suffix}`);
+}
+
+function getGitTargetCandidates(resource) {
+  const candidates = [];
+  addGitCandidate(candidates, resource);
+  addGitCandidate(candidates, vscode.window.activeTextEditor?.document.uri);
+  for (const folder of vscode.workspace.workspaceFolders || []) {
+    addGitCandidate(candidates, folder.uri);
+  }
+  return candidates;
+}
+
+function addGitCandidate(candidates, candidate) {
+  if (Array.isArray(candidate)) {
+    for (const item of candidate) {
+      addGitCandidate(candidates, item);
+    }
+    return;
+  }
+  if (!candidate || candidate.scheme !== "file") {
+    return;
+  }
+  if (candidates.some((uri) => uri.fsPath === candidate.fsPath)) {
+    return;
+  }
+  candidates.push(candidate);
+}
+
+async function buildGitTarget(uri) {
   const root = await findGitRoot(uri.fsPath);
   const branch = await getCurrentBranch(root);
   return {
@@ -86,6 +143,33 @@ async function getGitTarget(resource) {
     scopePath: uri.fsPath,
     scopeName: path.basename(uri.fsPath) || root
   };
+}
+
+async function discoverWorkspaceGitTargets() {
+  const folders = vscode.workspace.workspaceFolders || [];
+  const roots = new Set();
+  for (const folder of folders) {
+    const matches = await vscode.workspace.findFiles(new vscode.RelativePattern(folder, "**/.git"), "**/node_modules/**", 50);
+    for (const match of matches) {
+      roots.add(path.dirname(match.fsPath));
+    }
+  }
+
+  const targets = [];
+  for (const root of [...roots].sort()) {
+    try {
+      const branch = await getCurrentBranch(root);
+      targets.push({
+        root,
+        branch,
+        scopePath: root,
+        scopeName: path.basename(root) || root
+      });
+    } catch {
+      // Ignore malformed Git directories found by workspace search.
+    }
+  }
+  return targets;
 }
 
 class CommitViewProvider {
