@@ -1149,9 +1149,7 @@ function getCommitViewHtmlV2(webview) {
       if (message.type === "diffOpened") {
         if (message.error) {
           hintEl.textContent = message.error;
-          return;
         }
-        hintEl.textContent = "Diff opened in editor.";
       }
       if (message.type === "diff") {
         if (message.file !== currentPath) {
@@ -1280,7 +1278,6 @@ function getCommitViewHtmlV2(webview) {
 
     function requestPreview(filePath) {
       previewTitleEl.textContent = filePath;
-      hintEl.textContent = "Opening diff in editor...";
       vscode.postMessage({ type: "previewDiff", file: filePath });
     }
 
