@@ -58,9 +58,19 @@ async function openCommitFiles(provider, resource) {
   try {
     const target = await getGitTarget(resource);
     await provider.setTarget(target);
-    await vscode.commands.executeCommand(`${CommitViewProvider.viewType}.focus`);
+    await revealCommitView();
   } catch (error) {
     vscode.window.showErrorMessage(`Unable to open Commit Files: ${error.message}`);
+  }
+}
+
+async function revealCommitView() {
+  await vscode.commands.executeCommand("workbench.view.extension.beautifulGit");
+  try {
+    await vscode.commands.executeCommand(`${CommitViewProvider.viewType}.focus`);
+  } catch {
+    // Some VS Code builds route webview view focus through TreeDataProvider.
+    // Opening the contributed container is enough to make the Commit webview visible.
   }
 }
 
