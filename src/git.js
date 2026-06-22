@@ -74,6 +74,11 @@ async function getFileDiff(root, filePath, options = {}) {
   return diff;
 }
 
+async function getFileContentAtRevision(root, filePath, revision = "HEAD") {
+  const relativePath = normalizeRelativePath(root, filePath);
+  return runGit(root, ["show", `${revision}:${relativePath}`]);
+}
+
 async function getConflictFiles(root, scopePath, readFile) {
   const args = ["diff", "--name-only", "--diff-filter=U", "-z"];
   appendPathspec(args, root, scopePath);
@@ -460,6 +465,7 @@ module.exports = {
   getChangedFiles,
   getConflictFiles,
   getFileDiff,
+  getFileContentAtRevision,
   getCurrentBranch,
   parseBlamePorcelain,
   parsePorcelainStatus,

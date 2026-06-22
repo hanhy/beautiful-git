@@ -10,14 +10,17 @@ const {
   getChangedFiles,
   getConflictFiles,
   getCurrentBranch,
+  getFileContentAtRevision,
   getFileDiff,
   push
 } = require("./git");
 
 function activate(context) {
-  const commitViewProvider = new CommitViewProvider(context);
+  const commitDiffProvider = new CommitDiffDocumentProvider();
+  const commitViewProvider = new CommitViewProvider(context, commitDiffProvider);
   const blameAnnotationController = new BlameAnnotationController(context);
   context.subscriptions.push(
+    vscode.workspace.registerTextDocumentContentProvider(CommitDiffDocumentProvider.scheme, commitDiffProvider),
     vscode.window.registerWebviewViewProvider(CommitViewProvider.viewType, commitViewProvider, {
       webviewOptions: { retainContextWhenHidden: true }
     }),
@@ -185,8 +188,9 @@ async function discoverWorkspaceGitTargets() {
 class CommitViewProvider {
   static viewType = "beautifulGit.commitView";
 
-  constructor(context) {
+  constructor(context, diffProvider) {
     this.context = context;
+    this.diffProvider = diffProvider;
     this.view = undefined;
     this.target = undefined;
     this.filesByPath = new Map();
@@ -218,7 +222,7 @@ class CommitViewProvider {
     }
 
     if (message.type === "previewDiff") {
-      await this.previewDiff(message.file || "");
+      await this.openDiff(message.file || "");
       return;
     }
 
@@ -251,6 +255,34 @@ class CommitViewProvider {
       vscode.window.showErrorMessage(error.message);
     } finally {
       this.post({ type: "busy", busy: false });
+    }
+  }
+
+  async openDiff(filePath) {
+    if (!this.target || !filePath) {
+      return;
+    }
+
+    try {
+      const file = this.filesByPath.get(filePath) || {};
+      const leftUri = await this.diffProvider.createLeftUri(this.target.root, filePath, file);
+      const rightUri = await this.diffProvider.createRightUri(this.target.root, filePath, file);
+      await vscode.commands.executeCommand("vscode.diff", leftUri, rightUri, `Commit: ${filePath}`, {
+        preview: true,
+        viewColumn: vscode.ViewColumn.Active
+      });
+      this.post({
+        type: "diffOpened",
+        file: filePath,
+        error: ""
+      });
+    } catch (error) {
+      this.post({
+        type: "diffOpened",
+        file: filePath,
+        error: error.message
+      });
+      vscode.window.showErrorMessage(`Unable to open diff: ${error.message}`);
     }
   }
 
@@ -318,6 +350,51 @@ class CommitViewProvider {
 
   post(message) {
     this.view?.webview.postMessage(message);
+  }
+}
+
+class CommitDiffDocumentProvider {
+  static scheme = "beautiful-git-commit";
+
+  constructor() {
+    this.documents = new Map();
+  }
+
+  provideTextDocumentContent(uri) {
+    return this.documents.get(uri.toString()) || "";
+  }
+
+  async createLeftUri(root, filePath, file) {
+    if (file.status === "??") {
+      return this.createVirtualUri(filePath, "HEAD", "");
+    }
+
+    const oldPath = file.oldPath || filePath;
+    try {
+      const content = await getFileContentAtRevision(root, oldPath, "HEAD");
+      return this.createVirtualUri(oldPath, "HEAD", content);
+    } catch {
+      return this.createVirtualUri(oldPath, "HEAD", "");
+    }
+  }
+
+  async createRightUri(root, filePath, file) {
+    if (file.status && file.status.includes("D") && file.status !== "??") {
+      return this.createVirtualUri(filePath, "Current", "");
+    }
+    return vscode.Uri.file(path.join(root, filePath));
+  }
+
+  createVirtualUri(filePath, label, content) {
+    const nonce = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const uri = vscode.Uri.from({
+      scheme: CommitDiffDocumentProvider.scheme,
+      authority: label.toLowerCase(),
+      path: `/${filePath}`,
+      query: nonce
+    });
+    this.documents.set(uri.toString(), content);
+    return uri;
   }
 }
 
@@ -772,13 +849,12 @@ function getCommitViewHtmlV2(webview) {
     .main {
       min-height: 0;
       display: grid;
-      grid-template-columns: minmax(260px, 34%) minmax(0, 1fr);
+      grid-template-columns: minmax(0, 1fr);
       overflow: hidden;
     }
     .changes {
       min-width: 0;
       overflow: auto;
-      border-right: 1px solid var(--line);
       background: #1d1f23;
     }
     .tree-root {
@@ -838,9 +914,9 @@ function getCommitViewHtmlV2(webview) {
     .badge.deleted { color: #c9cdd5; background: rgba(130,136,145,0.2); }
     .badge.unversioned { color: #e1c883; background: rgba(214,180,108,0.18); }
     .preview {
+      display: none;
       min-width: 0;
       min-height: 0;
-      display: grid;
       grid-template-rows: auto minmax(0, 1fr);
       overflow: hidden;
       background: #1f2125;
@@ -1063,17 +1139,19 @@ function getCommitViewHtmlV2(webview) {
         state = message;
         selected = new Set(state.files.map((file) => file.path));
         if (!state.files.some((file) => file.path === currentPath)) {
-          currentPath = state.files[0]?.path || "";
+          currentPath = "";
         }
         render();
-        if (currentPath) {
-          requestPreview(currentPath);
-        } else {
-          renderEmptyDiff("Select a file to preview its changes.");
-        }
       }
       if (message.type === "busy") {
         setBusy(Boolean(message.busy));
+      }
+      if (message.type === "diffOpened") {
+        if (message.error) {
+          hintEl.textContent = message.error;
+          return;
+        }
+        hintEl.textContent = "Diff opened in editor.";
       }
       if (message.type === "diff") {
         if (message.file !== currentPath) {
@@ -1202,7 +1280,7 @@ function getCommitViewHtmlV2(webview) {
 
     function requestPreview(filePath) {
       previewTitleEl.textContent = filePath;
-      renderEmptyDiff("Loading diff...");
+      hintEl.textContent = "Opening diff in editor...";
       vscode.postMessage({ type: "previewDiff", file: filePath });
     }
 
