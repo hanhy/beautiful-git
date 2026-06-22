@@ -5,8 +5,8 @@ A local VS Code extension that opens Git conflict-marker files in an IntelliJ ID
 ## Features
 
 - Left / Result / Right layout inspired by IDEA's merge dialog.
-- IntelliJ IDEA-style directory context menu: `Git > Commit Files...` and `Git > Resolve Conflicts...`.
-- Sidebar commit panel with changed-file checkboxes, commit message input, `Commit`, and `Commit & Push`.
+- IntelliJ IDEA-style Explorer context menu: `Git > Commit Files...` and `Git > Resolve Conflicts...`.
+- Sidebar commit panel scanning the whole repository, with changed-file checkboxes, IDEA-style diff preview, commit message input, `Commit`, and `Commit & Push`.
 - Resolve Conflicts dialog listing all conflicted files in the selected directory.
 - Line-number gutter action to toggle per-line Git blame annotations.
 - Opens from the editor title or Explorer context menu.
@@ -29,10 +29,11 @@ Copy the extension folder into VS Code's local extensions directory:
 
 ```bash
 mkdir -p ~/.vscode/extensions
+rm -rf ~/.vscode/extensions/idea-merge-resolver
 cp -R beautiful-git ~/.vscode/extensions/idea-merge-resolver
 ```
 
-Restart VS Code. The command `IDEA Merge Resolver: Open Current File` should then appear in the command palette.
+Restart VS Code, or run `Developer: Reload Window`. The command `IDEA Merge Resolver: Open Current File` should then appear in the command palette.
 
 ### Option 2: Run in extension development mode
 
@@ -53,11 +54,12 @@ Use this if you want to modify or debug the extension.
 ### Commit Files
 
 1. Open a Git repository in VS Code.
-2. Right-click a directory in Explorer.
+2. Right-click a file or directory in Explorer.
 3. Choose `Git > Commit Files...`.
 4. In the left sidebar Commit panel, select the files you want to commit.
-5. Type the commit message at the bottom.
-6. Click `Commit` for a local commit, or `Commit & Push` to commit and push.
+5. Click a file to preview its changes.
+6. Type the commit message at the bottom.
+7. Click `Commit` for a local commit, or `Commit & Push` to commit and push.
 
 ### Resolve Conflicts
 
