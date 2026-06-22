@@ -5,7 +5,7 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const { execFileSync } = require("child_process");
-const { getBlameAnnotations, getChangedFiles, getConflictFiles } = require("../src/git");
+const { getBlameAnnotations, getChangedFiles, getConflictFiles, getFileDiff } = require("../src/git");
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "beautiful-git-"));
 
@@ -52,6 +52,9 @@ async function run() {
     assert(changes.some((file) => file.path === "conflict.txt" && file.isConflict));
     assert(changes.some((file) => file.path === "resolved-but-unstaged.txt" && file.isConflict));
     assert(changes.some((file) => file.path === "notes.txt" && file.label === "Unversioned"));
+    const notesDiff = await getFileDiff(root, "notes.txt", { status: "??" });
+    assert.strictEqual(notesDiff.blocks[0].kind, "added");
+    assert.strictEqual(notesDiff.stats.added, 1);
     assert.strictEqual(conflicts.length, 1);
     assert.strictEqual(conflicts[0].path, "conflict.txt");
     assert.strictEqual(conflicts[0].conflictCount, 1);

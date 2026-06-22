@@ -10,6 +10,7 @@ const {
   getChangedFiles,
   getConflictFiles,
   getCurrentBranch,
+  getFileDiff,
   push
 } = require("./git");
 
@@ -94,6 +95,7 @@ class CommitViewProvider {
     this.context = context;
     this.view = undefined;
     this.target = undefined;
+    this.filesByPath = new Map();
   }
 
   resolveWebviewView(webviewView) {
@@ -101,7 +103,7 @@ class CommitViewProvider {
     webviewView.webview.options = {
       enableScripts: true
     };
-    webviewView.webview.html = getCommitViewHtml(webviewView.webview);
+    webviewView.webview.html = getCommitViewHtmlV2(webviewView.webview);
     webviewView.webview.onDidReceiveMessage((message) => this.handleMessage(message));
     this.refresh();
   }
@@ -121,8 +123,13 @@ class CommitViewProvider {
       return;
     }
 
+    if (message.type === "previewDiff") {
+      await this.previewDiff(message.file || "");
+      return;
+    }
+
     if (message.type === "openFile") {
-      const file = message.file ? vscode.Uri.file(path.join(this.target.root, message.file)) : undefined;
+      const file = this.target && message.file ? vscode.Uri.file(path.join(this.target.root, message.file)) : undefined;
       if (file) {
         await vscode.window.showTextDocument(file, { preview: true });
       }
@@ -153,6 +160,33 @@ class CommitViewProvider {
     }
   }
 
+  async previewDiff(filePath) {
+    if (!this.target || !filePath) {
+      return;
+    }
+
+    try {
+      const file = this.filesByPath.get(filePath) || {};
+      const diff = await getFileDiff(this.target.root, filePath, {
+        status: file.status,
+        oldPath: file.oldPath
+      });
+      this.post({
+        type: "diff",
+        file: filePath,
+        diff,
+        error: ""
+      });
+    } catch (error) {
+      this.post({
+        type: "diff",
+        file: filePath,
+        diff: null,
+        error: error.message
+      });
+    }
+  }
+
   async refresh() {
     if (!this.view) {
       return;
@@ -169,7 +203,8 @@ class CommitViewProvider {
     }
 
     try {
-      const files = await getChangedFiles(this.target.root, this.target.scopePath);
+      const files = await getChangedFiles(this.target.root);
+      this.filesByPath = new Map(files.map((file) => [file.path, file]));
       this.post({
         type: "state",
         target: this.target,
@@ -177,6 +212,7 @@ class CommitViewProvider {
         error: ""
       });
     } catch (error) {
+      this.filesByPath = new Map();
       this.post({
         type: "state",
         target: this.target,
@@ -530,6 +566,626 @@ async function revealDocumentLocation(uri, line) {
 
 function hasConflictMarkers(text) {
   return /^(<<<<<<<|=======|>>>>>>>)(?: .*)?$/mu.test(text);
+}
+
+function getCommitViewHtmlV2(webview) {
+  const nonce = getNonce();
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}';">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Commit Files</title>
+  <style nonce="${nonce}">
+    :root {
+      color-scheme: dark;
+      --bg: #1e2024;
+      --panel: #282a2f;
+      --panel-2: #23252a;
+      --line: #3a3e46;
+      --text: #cfd2d8;
+      --muted: #8a909c;
+      --accent: #4e7fdf;
+      --blue-row: rgba(62, 96, 140, 0.64);
+      --blue-band: rgba(68, 105, 151, 0.78);
+      --green-row: rgba(54, 92, 65, 0.68);
+      --green-band: rgba(55, 101, 70, 0.82);
+      --gray-row: rgba(74, 77, 83, 0.68);
+      --gray-band: rgba(83, 87, 94, 0.82);
+      --red-row: rgba(104, 61, 55, 0.72);
+      --red-band: rgba(111, 63, 57, 0.86);
+      --yellow: #d6b46c;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      height: 100vh;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--text);
+      font: 13px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    button, textarea, input { font: inherit; }
+    button {
+      min-height: 26px;
+      border: 1px solid #4a4e57;
+      border-radius: 3px;
+      background: #30333a;
+      color: var(--text);
+      cursor: pointer;
+      padding: 2px 9px;
+      line-height: 18px;
+    }
+    button:hover { background: #383c45; border-color: #6a707c; }
+    button.primary { background: #3f73d8; border-color: #4f83e9; color: white; }
+    button:disabled { cursor: default; opacity: 0.55; }
+    input[type="checkbox"] {
+      width: 15px;
+      height: 15px;
+      margin: 0;
+      accent-color: var(--accent);
+    }
+    .commit-tool {
+      display: grid;
+      grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+      height: 100vh;
+      min-width: 0;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      min-height: 38px;
+      padding: 7px 10px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--line);
+      font-weight: 650;
+    }
+    .tabs {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+    .tab {
+      border: 1px solid transparent;
+      border-radius: 4px;
+      padding: 3px 10px;
+    }
+    .tab.active {
+      background: rgba(68, 111, 203, 0.3);
+      border-color: rgba(100, 141, 230, 0.62);
+    }
+    .scope {
+      padding: 6px 10px;
+      color: var(--muted);
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .toolbar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 10px;
+      background: var(--panel-2);
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    .toolbar .spacer { flex: 1; }
+    .main {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: minmax(260px, 34%) minmax(0, 1fr);
+      overflow: hidden;
+    }
+    .changes {
+      min-width: 0;
+      overflow: auto;
+      border-right: 1px solid var(--line);
+      background: #1d1f23;
+    }
+    .tree-root {
+      display: grid;
+      grid-template-columns: 24px 24px minmax(0, 1fr);
+      align-items: center;
+      min-height: 34px;
+      padding: 4px 8px;
+      border-bottom: 1px solid rgba(255,255,255,0.045);
+      color: #d7dae0;
+      font-weight: 650;
+    }
+    .file-row {
+      display: grid;
+      grid-template-columns: 24px 24px minmax(0, 1fr) auto;
+      gap: 4px;
+      align-items: center;
+      min-height: 30px;
+      padding: 3px 8px 3px 20px;
+      border-bottom: 1px solid rgba(255,255,255,0.032);
+      cursor: default;
+    }
+    .file-row:hover { background: rgba(255,255,255,0.045); }
+    .file-row.active {
+      background: rgba(76, 119, 202, 0.48);
+      color: #eef3ff;
+    }
+    .twisty {
+      color: #a9afb9;
+      text-align: center;
+      font-size: 15px;
+    }
+    .name {
+      min-width: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      letter-spacing: 0;
+    }
+    .path-muted {
+      color: var(--muted);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin-left: 6px;
+    }
+    .badge {
+      justify-self: end;
+      border-radius: 3px;
+      padding: 1px 5px;
+      color: #c8ccd3;
+      background: rgba(255,255,255,0.06);
+      font-size: 11px;
+    }
+    .badge.conflict { color: #f0afa7; background: rgba(199,109,97,0.22); }
+    .badge.added { color: #a8d3ae; background: rgba(106,171,115,0.18); }
+    .badge.modified { color: #a9c8f7; background: rgba(80,132,212,0.2); }
+    .badge.deleted { color: #c9cdd5; background: rgba(130,136,145,0.2); }
+    .badge.unversioned { color: #e1c883; background: rgba(214,180,108,0.18); }
+    .preview {
+      min-width: 0;
+      min-height: 0;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      overflow: hidden;
+      background: #1f2125;
+    }
+    .preview-header {
+      min-width: 0;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: center;
+      min-height: 36px;
+      padding: 6px 10px;
+      background: var(--panel-2);
+      border-bottom: 1px solid var(--line);
+    }
+    .preview-title {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      letter-spacing: 0;
+    }
+    .stats {
+      color: var(--muted);
+      white-space: nowrap;
+    }
+    .diff {
+      min-width: 0;
+      min-height: 0;
+      overflow: auto;
+      font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      letter-spacing: 0;
+    }
+    .diff-grid { min-width: 760px; }
+    .diff-head, .diff-row {
+      display: grid;
+      grid-template-columns: 52px minmax(240px, 1fr) 56px 52px minmax(240px, 1fr);
+    }
+    .diff-head {
+      position: sticky;
+      top: 0;
+      z-index: 4;
+      min-height: 28px;
+      background: #25272c;
+      border-bottom: 1px solid var(--line);
+      color: #d4d7dd;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-weight: 650;
+    }
+    .head-cell {
+      padding: 5px 8px;
+      min-width: 0;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      border-right: 1px solid rgba(255,255,255,0.07);
+    }
+    .diff-row { min-height: 22px; }
+    .line-no {
+      padding: 1px 8px;
+      color: #727985;
+      text-align: right;
+      user-select: none;
+      border-right: 1px solid rgba(255,255,255,0.06);
+    }
+    .code {
+      min-width: 0;
+      padding: 1px 8px;
+      white-space: pre;
+      overflow: hidden;
+      border-right: 1px solid rgba(255,255,255,0.04);
+    }
+    .bridge {
+      position: relative;
+      overflow: hidden;
+      border-right: 1px solid rgba(255,255,255,0.08);
+      border-left: 1px solid rgba(255,255,255,0.04);
+    }
+    .ribbon {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 0;
+      bottom: 0;
+      background: var(--band);
+      opacity: 0.95;
+    }
+    .block-start .ribbon,
+    .block-end .ribbon {
+      clip-path: polygon(0 0, calc(100% - 16px) 0, 100% 50%, calc(100% - 16px) 100%, 0 100%);
+    }
+    .kind-added {
+      --row: var(--green-row);
+      --band: var(--green-band);
+    }
+    .kind-deleted {
+      --row: var(--gray-row);
+      --band: var(--gray-band);
+    }
+    .kind-changed {
+      --row: var(--blue-row);
+      --band: var(--blue-band);
+    }
+    .kind-conflict {
+      --row: var(--red-row);
+      --band: var(--red-band);
+    }
+    .kind-added .new-code,
+    .kind-added .new-no,
+    .kind-deleted .old-code,
+    .kind-deleted .old-no,
+    .kind-changed .old-code,
+    .kind-changed .old-no,
+    .kind-changed .new-code,
+    .kind-changed .new-no,
+    .kind-conflict .old-code,
+    .kind-conflict .old-no,
+    .kind-conflict .new-code,
+    .kind-conflict .new-no {
+      background: var(--row);
+    }
+    .empty {
+      padding: 18px 10px;
+      color: var(--muted);
+      text-align: center;
+    }
+    .footer {
+      border-top: 1px solid var(--line);
+      background: var(--panel);
+      padding: 8px 10px 10px;
+    }
+    textarea {
+      width: 100%;
+      min-height: 86px;
+      resize: vertical;
+      border: 1px solid #4c515a;
+      border-radius: 3px;
+      outline: none;
+      background: #1e2024;
+      color: var(--text);
+      padding: 8px;
+      letter-spacing: 0;
+    }
+    textarea:focus { border-color: var(--accent); }
+    .actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 8px;
+      align-items: center;
+    }
+    .actions .spacer { flex: 1; }
+    .hint {
+      min-height: 18px;
+      color: var(--muted);
+    }
+    @media (max-width: 820px) {
+      .main {
+        grid-template-columns: 1fr;
+        grid-template-rows: minmax(150px, 38%) minmax(0, 1fr);
+      }
+      .changes {
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="commit-tool">
+    <div class="header">
+      <div class="tabs"><span class="tab active">Commit</span><span class="tab">Stash</span></div>
+      <button id="refresh" title="Refresh">↻</button>
+    </div>
+    <div class="scope" id="scope">Select a Git directory</div>
+    <div class="toolbar">
+      <button id="all" title="Select all">All</button>
+      <button id="none" title="Unselect all">None</button>
+      <button id="open" title="Open selected file">Open</button>
+      <span class="spacer"></span>
+      <span id="count"></span>
+    </div>
+    <div class="main">
+      <div class="changes" id="files"></div>
+      <div class="preview">
+        <div class="preview-header">
+          <div class="preview-title" id="previewTitle">Select a changed file</div>
+          <div class="stats" id="stats"></div>
+        </div>
+        <div class="diff" id="diff"><div class="empty">Select a file to preview its changes.</div></div>
+      </div>
+    </div>
+    <div class="footer">
+      <textarea id="message" placeholder="Commit Message"></textarea>
+      <div class="actions">
+        <button id="commit">Commit</button>
+        <button id="commitPush" class="primary">Commit & Push</button>
+        <span class="spacer"></span>
+        <span class="hint" id="hint"></span>
+      </div>
+    </div>
+  </div>
+  <script nonce="${nonce}">
+    const vscode = acquireVsCodeApi();
+    let state = { target: null, files: [], error: "" };
+    let selected = new Set();
+    let currentPath = "";
+    const filesEl = document.getElementById("files");
+    const diffEl = document.getElementById("diff");
+    const scopeEl = document.getElementById("scope");
+    const countEl = document.getElementById("count");
+    const hintEl = document.getElementById("hint");
+    const messageEl = document.getElementById("message");
+    const previewTitleEl = document.getElementById("previewTitle");
+    const statsEl = document.getElementById("stats");
+
+    window.addEventListener("message", (event) => {
+      const message = event.data;
+      if (message.type === "state") {
+        state = message;
+        selected = new Set(state.files.map((file) => file.path));
+        if (!state.files.some((file) => file.path === currentPath)) {
+          currentPath = state.files[0]?.path || "";
+        }
+        render();
+        if (currentPath) {
+          requestPreview(currentPath);
+        } else {
+          renderEmptyDiff("Select a file to preview its changes.");
+        }
+      }
+      if (message.type === "busy") {
+        setBusy(Boolean(message.busy));
+      }
+      if (message.type === "diff") {
+        if (message.file !== currentPath) {
+          return;
+        }
+        if (message.error) {
+          renderEmptyDiff(message.error);
+          return;
+        }
+        renderDiff(message.diff);
+      }
+    });
+
+    document.getElementById("refresh").addEventListener("click", () => vscode.postMessage({ type: "refresh" }));
+    document.getElementById("all").addEventListener("click", () => {
+      selected = new Set(state.files.map((file) => file.path));
+      renderFiles();
+      updateCount();
+    });
+    document.getElementById("none").addEventListener("click", () => {
+      selected = new Set();
+      renderFiles();
+      updateCount();
+    });
+    document.getElementById("open").addEventListener("click", () => {
+      if (currentPath) {
+        vscode.postMessage({ type: "openFile", file: currentPath });
+      }
+    });
+    document.getElementById("commit").addEventListener("click", () => commit(false));
+    document.getElementById("commitPush").addEventListener("click", () => commit(true));
+
+    filesEl.addEventListener("change", (event) => {
+      const checkbox = event.target.closest("input[data-file]");
+      if (!checkbox) {
+        return;
+      }
+      if (checkbox.checked) {
+        selected.add(checkbox.dataset.file);
+      } else {
+        selected.delete(checkbox.dataset.file);
+      }
+      renderFiles();
+      updateCount();
+    });
+
+    filesEl.addEventListener("click", (event) => {
+      if (event.target.closest("input")) {
+        return;
+      }
+      const row = event.target.closest("[data-preview]");
+      if (!row) {
+        return;
+      }
+      currentPath = row.dataset.preview;
+      renderFiles();
+      requestPreview(currentPath);
+    });
+
+    function commit(pushAfter) {
+      const files = Array.from(selected);
+      if (files.length === 0) {
+        hintEl.textContent = "Select at least one file.";
+        return;
+      }
+      if (!messageEl.value.trim()) {
+        hintEl.textContent = "Commit message is required.";
+        messageEl.focus();
+        return;
+      }
+      setBusy(true);
+      vscode.postMessage({ type: "commit", files, message: messageEl.value, pushAfter });
+    }
+
+    function render() {
+      const targetLabel = state.target ? state.target.scopeName + " · " + state.target.branch : "No Git target";
+      scopeEl.textContent = state.error || targetLabel;
+      if (state.error) {
+        filesEl.innerHTML = '<div class="empty">' + escapeHtml(state.error) + "</div>";
+        updateCount();
+        return;
+      }
+      if (!state.files.length) {
+        filesEl.innerHTML = '<div class="empty">No local changes in this repository.</div>';
+        updateCount();
+        return;
+      }
+      renderFiles();
+      updateCount();
+      hintEl.textContent = "";
+    }
+
+    function renderFiles() {
+      if (!state.files.length) {
+        return;
+      }
+      const branch = state.target?.branch ? '<span class="path-muted">' + escapeHtml(state.target.branch) + '</span>' : "";
+      filesEl.innerHTML = '<div class="tree-root">' +
+        '<span class="twisty">⌄</span>' +
+        '<input type="checkbox" id="rootCheck" ' + (selected.size === state.files.length ? "checked" : "") + '>' +
+        '<span>Changes <span class="path-muted">' + state.files.length + ' file' + (state.files.length === 1 ? "" : "s") + '</span>' + branch + '</span>' +
+      '</div>' + state.files.map((file) => {
+        const checked = selected.has(file.path) ? " checked" : "";
+        const badgeClass = file.label.toLowerCase().replace(/\\s+/g, "-");
+        const active = file.path === currentPath ? " active" : "";
+        const oldPath = file.oldPath ? '<span class="path-muted">from ' + escapeHtml(file.oldPath) + "</span>" : "";
+        return '<div class="file-row' + active + '" data-preview="' + escapeAttr(file.path) + '">' +
+          '<span class="twisty"></span>' +
+          '<input type="checkbox" data-file="' + escapeAttr(file.path) + '"' + checked + ">" +
+          '<span class="name" title="' + escapeAttr(file.path) + '">' + escapeHtml(file.path) + oldPath + "</span>" +
+          '<span class="badge ' + badgeClass + '">' + escapeHtml(file.label) + "</span>" +
+        "</div>";
+      }).join("");
+
+      const rootCheck = document.getElementById("rootCheck");
+      rootCheck.addEventListener("change", () => {
+        selected = rootCheck.checked ? new Set(state.files.map((file) => file.path)) : new Set();
+        renderFiles();
+        updateCount();
+      });
+    }
+
+    function updateCount() {
+      countEl.textContent = selected.size + " / " + state.files.length + " selected";
+    }
+
+    function requestPreview(filePath) {
+      previewTitleEl.textContent = filePath;
+      renderEmptyDiff("Loading diff...");
+      vscode.postMessage({ type: "previewDiff", file: filePath });
+    }
+
+    function renderDiff(diff) {
+      if (!diff) {
+        renderEmptyDiff("No diff available.");
+        return;
+      }
+      previewTitleEl.textContent = diff.file || currentPath;
+      statsEl.textContent = "+" + diff.stats.added + " -" + diff.stats.deleted + " ~" + diff.stats.modified;
+      if (diff.isBinary) {
+        renderEmptyDiff("Binary file differences are not shown.");
+        return;
+      }
+      if (!diff.rows.length) {
+        renderEmptyDiff("No textual differences.");
+        return;
+      }
+
+      const rows = diff.rows.map((row, index) => {
+        const prev = diff.rows[index - 1];
+        const next = diff.rows[index + 1];
+        const blockClass = row.blockId
+          ? (prev?.blockId === row.blockId ? "" : " block-start") + (next?.blockId === row.blockId ? "" : " block-end")
+          : "";
+        const kindClass = "kind-" + row.kind;
+        const ribbon = row.kind === "context" ? "" : '<span class="ribbon"></span>';
+        return '<div class="diff-row ' + kindClass + blockClass + '">' +
+          '<div class="line-no old-no">' + escapeHtml(row.oldNumber || "") + '</div>' +
+          '<div class="code old-code">' + escapeCode(row.oldText) + '</div>' +
+          '<div class="bridge">' + ribbon + '</div>' +
+          '<div class="line-no new-no">' + escapeHtml(row.newNumber || "") + '</div>' +
+          '<div class="code new-code">' + escapeCode(row.newText) + '</div>' +
+        '</div>';
+      }).join("");
+
+      diffEl.innerHTML = '<div class="diff-grid">' +
+        '<div class="diff-head">' +
+          '<div class="head-cell"></div>' +
+          '<div class="head-cell">' + escapeHtml(diff.oldTitle || "HEAD") + '</div>' +
+          '<div class="head-cell"></div>' +
+          '<div class="head-cell"></div>' +
+          '<div class="head-cell">' + escapeHtml(diff.newTitle || "Current version") + '</div>' +
+        '</div>' +
+        rows +
+      '</div>';
+    }
+
+    function renderEmptyDiff(text) {
+      diffEl.innerHTML = '<div class="empty">' + escapeHtml(text) + '</div>';
+      statsEl.textContent = "";
+    }
+
+    function setBusy(busy) {
+      for (const button of document.querySelectorAll("button")) {
+        button.disabled = busy;
+      }
+      hintEl.textContent = busy ? "Running Git..." : "";
+    }
+
+    function escapeHtml(value) {
+      return String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    }
+
+    function escapeAttr(value) {
+      return escapeHtml(value).replace(/'/g, "&#39;");
+    }
+
+    function escapeCode(value) {
+      const text = value === "" ? " " : value;
+      return escapeHtml(text);
+    }
+
+    vscode.postMessage({ type: "refresh" });
+  </script>
+</body>
+</html>`;
 }
 
 function getCommitViewHtml(webview) {

@@ -44,6 +44,36 @@ async function getChangedFiles(root, scopePath) {
   }));
 }
 
+async function getFileDiff(root, filePath, options = {}) {
+  const relativePath = normalizeRelativePath(root, filePath);
+  const status = options.status || "";
+
+  if (status === "??") {
+    const absolutePath = path.join(root, relativePath);
+    const text = await fs.promises.readFile(absolutePath, "utf8");
+    return buildUntrackedDiff(relativePath, text);
+  }
+
+  const output = await runGit(root, ["diff", "--no-color", "--no-ext-diff", "--unified=1000000", "HEAD", "--", relativePath]);
+  const diff = parseUnifiedDiff(output);
+  diff.file = relativePath;
+  diff.oldPath = options.oldPath || diff.oldPath || "";
+  diff.status = status;
+
+  if (isConflictStatus(status)) {
+    for (const row of diff.rows) {
+      if (row.kind !== "context") {
+        row.kind = "conflict";
+      }
+    }
+    for (const block of diff.blocks) {
+      block.kind = "conflict";
+    }
+  }
+
+  return diff;
+}
+
 async function getConflictFiles(root, scopePath, readFile) {
   const args = ["diff", "--name-only", "--diff-filter=U", "-z"];
   appendPathspec(args, root, scopePath);
@@ -164,6 +194,206 @@ function parsePorcelainStatus(output) {
   return entries;
 }
 
+function parseUnifiedDiff(output) {
+  const diff = {
+    file: "",
+    oldPath: "",
+    status: "",
+    oldTitle: "HEAD",
+    newTitle: "Current version",
+    rows: [],
+    blocks: [],
+    stats: {
+      added: 0,
+      deleted: 0,
+      modified: 0
+    },
+    isBinary: /Binary files /u.test(output)
+  };
+
+  const lines = output.split(/\r?\n/u);
+  let index = 0;
+  let oldLine = 0;
+  let newLine = 0;
+  let blockId = 0;
+
+  for (const line of lines) {
+    if (line.startsWith("--- ")) {
+      diff.oldTitle = cleanDiffTitle(line.slice(4));
+      continue;
+    }
+    if (line.startsWith("+++ ")) {
+      diff.newTitle = cleanDiffTitle(line.slice(4));
+    }
+  }
+
+  while (index < lines.length) {
+    const header = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/u.exec(lines[index]);
+    if (!header) {
+      index += 1;
+      continue;
+    }
+
+    oldLine = Number(header[1]);
+    newLine = Number(header[3]);
+    index += 1;
+
+    while (index < lines.length && !lines[index].startsWith("@@ ")) {
+      const line = lines[index];
+      if (line.startsWith("\\ No newline")) {
+        index += 1;
+        continue;
+      }
+
+      if (line.startsWith(" ")) {
+        diff.rows.push({
+          oldNumber: oldLine,
+          newNumber: newLine,
+          oldText: line.slice(1),
+          newText: line.slice(1),
+          kind: "context",
+          blockId: null
+        });
+        oldLine += 1;
+        newLine += 1;
+        index += 1;
+        continue;
+      }
+
+      if (line.startsWith("-") || line.startsWith("+")) {
+        const deleted = [];
+        const added = [];
+        while (index < lines.length && (lines[index].startsWith("-") || lines[index].startsWith("+"))) {
+          const changeLine = lines[index];
+          if (changeLine.startsWith("-")) {
+            deleted.push({
+              number: oldLine,
+              text: changeLine.slice(1)
+            });
+            oldLine += 1;
+          } else {
+            added.push({
+              number: newLine,
+              text: changeLine.slice(1)
+            });
+            newLine += 1;
+          }
+          index += 1;
+        }
+
+        appendChangeRows(diff, {
+          id: `change-${blockId}`,
+          deleted,
+          added
+        });
+        blockId += 1;
+        continue;
+      }
+
+      index += 1;
+    }
+  }
+
+  return diff;
+}
+
+function appendChangeRows(diff, change) {
+  const kind = getChangeKind(change.deleted.length, change.added.length);
+  const startRow = diff.rows.length;
+  const max = Math.max(change.deleted.length, change.added.length);
+
+  for (let i = 0; i < max; i += 1) {
+    const oldEntry = change.deleted[i];
+    const newEntry = change.added[i];
+    diff.rows.push({
+      oldNumber: oldEntry?.number || "",
+      newNumber: newEntry?.number || "",
+      oldText: oldEntry?.text || "",
+      newText: newEntry?.text || "",
+      kind,
+      blockId: change.id
+    });
+  }
+
+  diff.blocks.push({
+    id: change.id,
+    kind,
+    startRow,
+    rowCount: max,
+    deleted: change.deleted.length,
+    added: change.added.length
+  });
+
+  if (kind === "added") {
+    diff.stats.added += change.added.length;
+  } else if (kind === "deleted") {
+    diff.stats.deleted += change.deleted.length;
+  } else {
+    diff.stats.modified += max;
+  }
+}
+
+function getChangeKind(deletedCount, addedCount) {
+  if (deletedCount > 0 && addedCount > 0) {
+    return "changed";
+  }
+  if (addedCount > 0) {
+    return "added";
+  }
+  return "deleted";
+}
+
+function buildUntrackedDiff(relativePath, text) {
+  const lines = splitFileLines(text);
+  const rows = lines.map((line, index) => ({
+    oldNumber: "",
+    newNumber: index + 1,
+    oldText: "",
+    newText: line,
+    kind: "added",
+    blockId: "change-0"
+  }));
+
+  return {
+    file: relativePath,
+    oldPath: "",
+    status: "??",
+    oldTitle: "No base revision",
+    newTitle: "Current version",
+    rows,
+    blocks: rows.length > 0 ? [{
+      id: "change-0",
+      kind: "added",
+      startRow: 0,
+      rowCount: rows.length,
+      deleted: 0,
+      added: rows.length
+    }] : [],
+    stats: {
+      added: rows.length,
+      deleted: 0,
+      modified: 0
+    },
+    isBinary: false
+  };
+}
+
+function splitFileLines(text) {
+  if (!text) {
+    return [];
+  }
+  const normalized = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  const lines = normalized.split("\n");
+  if (lines[lines.length - 1] === "") {
+    lines.pop();
+  }
+  return lines;
+}
+
+function cleanDiffTitle(value) {
+  return value.replace(/^[ab]\//u, "") || value;
+}
+
 function statusLabel(status) {
   if (isConflictStatus(status)) {
     return "Conflict";
@@ -215,15 +445,25 @@ function appendPathspec(args, root, scopePath) {
   }
 }
 
+function normalizeRelativePath(root, filePath) {
+  const relative = path.isAbsolute(filePath) ? path.relative(root, filePath) : filePath;
+  if (!relative || relative.startsWith("..")) {
+    throw new Error("File is outside the Git repository.");
+  }
+  return relative;
+}
+
 module.exports = {
   commitFiles,
   findGitRoot,
   getBlameAnnotations,
   getChangedFiles,
   getConflictFiles,
+  getFileDiff,
   getCurrentBranch,
   parseBlamePorcelain,
   parsePorcelainStatus,
+  parseUnifiedDiff,
   push,
   runGit,
   statusLabel
