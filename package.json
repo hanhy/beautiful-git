@@ -2,7 +2,7 @@
   "name": "idea-merge-resolver",
   "displayName": "IDEA Merge Resolver",
   "description": "IntelliJ IDEA-style Git commit and merge conflict tools for VS Code.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "local",
   "engines": {
     "vscode": "^1.92.0"
@@ -105,7 +105,7 @@
       "explorer/context": [
         {
           "submenu": "beautifulGit.directoryGit",
-          "when": "explorerResourceIsFolder && resourceScheme == file",
+          "when": "resourceScheme == file",
           "group": "navigation@10"
         },
         {
