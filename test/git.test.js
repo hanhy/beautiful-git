@@ -1,7 +1,7 @@
 "use strict";
 
 const assert = require("assert");
-const { parseBlamePorcelain, parsePorcelainStatus, parseUnifiedDiff } = require("../src/git");
+const { getPushArgs, parseBlamePorcelain, parsePorcelainStatus, parseUnifiedDiff } = require("../src/git");
 
 const entries = parsePorcelainStatus(" M src/app.js\0A  src/new.js\0?? notes.txt\0R  src/new-name.js\0src/old-name.js\0UU conflict.txt\0");
 
@@ -66,5 +66,14 @@ assert.strictEqual(parsedDiff.stats.deleted, 1);
 assert(parsedDiff.rows.some((row) => row.kind === "changed" && row.oldText.includes("old") && row.newText.includes("new")));
 assert(parsedDiff.rows.some((row) => row.kind === "added" && row.newText.includes("added")));
 assert(parsedDiff.rows.some((row) => row.kind === "deleted" && row.oldText.includes("removed")));
+
+assert.deepStrictEqual(getPushArgs("main", true), ["push"]);
+assert.deepStrictEqual(getPushArgs("hhy/test-plugin_20260622", false), [
+  "push",
+  "--set-upstream",
+  "origin",
+  "hhy/test-plugin_20260622"
+]);
+assert.deepStrictEqual(getPushArgs("HEAD", false), ["push"]);
 
 console.log("git tests passed");

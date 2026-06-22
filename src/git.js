@@ -123,8 +123,30 @@ async function commitFiles(root, files, message) {
   return runGit(root, ["commit", "-m", message.trim(), "--", ...files]);
 }
 
-async function push(root) {
-  return runGit(root, ["push"]);
+async function push(root, gitRunner = runGit) {
+  const branch = await getCurrentBranch(root);
+  if (!branch || branch === "HEAD") {
+    return gitRunner(root, getPushArgs(branch, true));
+  }
+
+  const hasUpstream = await hasUpstreamBranch(root, gitRunner);
+  return gitRunner(root, getPushArgs(branch, hasUpstream));
+}
+
+async function hasUpstreamBranch(root, gitRunner = runGit) {
+  try {
+    await gitRunner(root, ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function getPushArgs(branch, hasUpstream) {
+  if (!branch || branch === "HEAD" || hasUpstream) {
+    return ["push"];
+  }
+  return ["push", "--set-upstream", "origin", branch];
 }
 
 function parseBlamePorcelain(output) {
@@ -467,6 +489,7 @@ module.exports = {
   getFileDiff,
   getFileContentAtRevision,
   getCurrentBranch,
+  getPushArgs,
   parseBlamePorcelain,
   parsePorcelainStatus,
   parseUnifiedDiff,
